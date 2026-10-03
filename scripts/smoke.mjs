@@ -23,9 +23,16 @@ const freePort = () => new Promise((resolve, reject) => {
 
 const port = await freePort();
 const token = randomBytes(16).toString('hex');
-// The host passes only these through; everything else must work without them.
-const inherited = ['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'SystemRoot', 'SYSTEMROOT', 'windir', 'ComSpec', 'PATHEXT', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'ProgramData', 'ProgramFiles'];
-const env = Object.fromEntries(inherited.filter((name) => process.env[name]).map((name) => [name, process.env[name]]));
+// OpenChamber passes only these through (INHERITED_SERVICE_ENV_NAMES in its
+// server/lib/guests/service.js); everything else must work without them.
+const inherited = new Set([
+  'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'TEMP', 'TMP', 'TZ',
+  'LANG', 'LANGUAGE', 'LC_ALL', 'LC_CTYPE', 'LC_MESSAGES',
+  'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_RUNTIME_DIR',
+  'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA',
+  'SYSTEMROOT', 'SYSTEMDRIVE', 'COMSPEC', 'PATHEXT', 'WINDIR',
+]);
+const env = Object.fromEntries(Object.entries(process.env).filter(([name, value]) => value && inherited.has(name.toUpperCase())));
 const child = spawn(runtime, [entry], {
   env: { ...env, OPENCHAMBER_SERVICE_PORT: String(port), OPENCHAMBER_SERVICE_TOKEN: token, ELECTRON_RUN_AS_NODE: '1' },
   stdio: ['ignore', 'inherit', 'inherit'],

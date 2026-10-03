@@ -12,10 +12,15 @@ export type ExecResult =
  * The service gets a minimal PATH from the host, so system tools are tried at
  * their usual absolute locations before PATH lookup.
  */
-export const run = async (commands: string[], args: string[], timeout = EXEC_TIMEOUT_MS): Promise<ExecResult> => {
+export const run = async (
+  commands: string[],
+  args: string[],
+  timeout = EXEC_TIMEOUT_MS,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<ExecResult> => {
   for (const command of commands) {
     const result = await new Promise<ExecResult>((resolve) => {
-      execFile(command, args, { timeout, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
+      execFile(command, args, { timeout, env, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
         if (!error) {
           resolve({ ok: true, stdout });
           return;

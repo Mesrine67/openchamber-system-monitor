@@ -41,10 +41,10 @@ var diskPercent = (disk) => disk.total > 0 ? disk.used / disk.total * 100 : 0;
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 var EXEC_TIMEOUT_MS = 3000;
-var run = async (commands, args, timeout = EXEC_TIMEOUT_MS) => {
+var run = async (commands, args, timeout = EXEC_TIMEOUT_MS, env = process.env) => {
   for (const command of commands) {
     const result = await new Promise((resolve) => {
-      execFile(command, args, { timeout, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
+      execFile(command, args, { timeout, env, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
         if (!error) {
           resolve({ ok: true, stdout });
           return;
@@ -383,7 +383,11 @@ var systemRoot = process.env.SystemRoot ?? process.env.SYSTEMROOT ?? "C:\\Window
 var POWERSHELL = [`${systemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`, "powershell.exe"];
 var NVIDIA_SMI_WIN32 = ["nvidia-smi.exe", `${systemRoot}\\System32\\nvidia-smi.exe`];
 var POWERSHELL_ARGS = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"];
-var runPowerShell = (script, timeout) => run(POWERSHELL, [...POWERSHELL_ARGS, script], timeout);
+var powerShellEnv = (source = process.env) => {
+  const hasModulePath = Object.keys(source).some((name) => name.toUpperCase() === "PSMODULEPATH");
+  return hasModulePath ? source : { ...source, PSModulePath: `${systemRoot}\\System32\\WindowsPowerShell\\v1.0\\Modules` };
+};
+var runPowerShell = (script, timeout) => run(POWERSHELL, [...POWERSHELL_ARGS, script], timeout, powerShellEnv());
 var gpuLoopScript = (parentPid) => `
 $ErrorActionPreference = 'SilentlyContinue'
 while ($true) {
@@ -414,6 +418,7 @@ var createGpuLoop = () => {
       return;
     }
     const proc = spawn(command, [...POWERSHELL_ARGS, gpuLoopScript(process.pid)], {
+      env: powerShellEnv(),
       stdio: ["ignore", "pipe", "ignore"],
       windowsHide: true
     });

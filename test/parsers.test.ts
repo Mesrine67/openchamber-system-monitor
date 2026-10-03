@@ -5,6 +5,7 @@ import { cpuUsage, limitedCpuUsage, parseCfsQuota, parseCpuMax, parseCpuStatUsag
 import { darwinDisks, linuxDisks, parseDf, parseWindowsDisks } from '../src/service/collectors/parse-disks.ts';
 import { parseAmdCards, parseIoreg, parseNvidiaSmi, parseWindowsGpu } from '../src/service/collectors/parse-gpu.ts';
 import { parseCgroupMemory, parseMeminfo, parseSwapUsage, parseVmStat } from '../src/service/collectors/parse-memory.ts';
+import { powerShellEnv } from '../src/service/collectors/windows.ts';
 import { looksLikeContainer } from '../src/service/env.ts';
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
@@ -199,5 +200,18 @@ describe('disks', () => {
     expect(many?.map((disk) => [disk.mount, disk.label])).toEqual([['C:', 'Windows'], ['D:', null]]);
     expect(parseWindowsDisks('')).toEqual([]);
     expect(parseWindowsDisks('{oops')).toBeNull();
+  });
+});
+
+describe('windows environment', () => {
+  test('PowerShell gets the system module path when the host dropped it', () => {
+    const env = powerShellEnv({ Path: 'C:\\Windows' });
+    expect(env.PSModulePath).toEndWith('\\System32\\WindowsPowerShell\\v1.0\\Modules');
+    expect(env.Path).toBe('C:\\Windows');
+  });
+
+  test('an existing module path is kept, whatever its case', () => {
+    const source = { PSMODULEPATH: 'C:\\Mine' };
+    expect(powerShellEnv(source)).toBe(source);
   });
 });

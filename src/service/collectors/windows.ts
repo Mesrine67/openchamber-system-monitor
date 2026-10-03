@@ -10,8 +10,18 @@ export const NVIDIA_SMI_WIN32 = ['nvidia-smi.exe', `${systemRoot}\\System32\\nvi
 
 const POWERSHELL_ARGS = ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command'];
 
+/**
+ * OpenChamber starts services with a minimal environment that has no
+ * `PSModulePath`. Windows PowerShell then hangs before running anything, even
+ * `Write-Output 1`, so it gets the system module path back.
+ */
+export const powerShellEnv = (source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv => {
+  const hasModulePath = Object.keys(source).some((name) => name.toUpperCase() === 'PSMODULEPATH');
+  return hasModulePath ? source : { ...source, PSModulePath: `${systemRoot}\\System32\\WindowsPowerShell\\v1.0\\Modules` };
+};
+
 export const runPowerShell = (script: string, timeout?: number): Promise<ExecResult> =>
-  run(POWERSHELL, [...POWERSHELL_ARGS, script], timeout);
+  run(POWERSHELL, [...POWERSHELL_ARGS, script], timeout, powerShellEnv());
 
 /**
  * Starting PowerShell costs about a second, too slow for a 2 s tick. One
@@ -56,6 +66,7 @@ export const createGpuLoop = (): LineLoop => {
       return;
     }
     const proc = spawn(command, [...POWERSHELL_ARGS, gpuLoopScript(process.pid)], {
+      env: powerShellEnv(),
       stdio: ['ignore', 'pipe', 'ignore'],
       windowsHide: true,
     });
