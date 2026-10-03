@@ -204,9 +204,9 @@ describe('disks', () => {
 });
 
 describe('windows environment', () => {
-  test('PowerShell gets the system module path when the host dropped it', () => {
+  test('PowerShell gets an empty module path when the host dropped it', () => {
     const env = powerShellEnv({ Path: 'C:\\Windows' });
-    expect(env.PSModulePath).toEndWith('\\System32\\WindowsPowerShell\\v1.0\\Modules');
+    expect(env.PSModulePath).toBe('');
     expect(env.Path).toBe('C:\\Windows');
   });
 

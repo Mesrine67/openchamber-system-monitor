@@ -385,7 +385,7 @@ var NVIDIA_SMI_WIN32 = ["nvidia-smi.exe", `${systemRoot}\\System32\\nvidia-smi.e
 var POWERSHELL_ARGS = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"];
 var powerShellEnv = (source = process.env) => {
   const hasModulePath = Object.keys(source).some((name) => name.toUpperCase() === "PSMODULEPATH");
-  return hasModulePath ? source : { ...source, PSModulePath: `${systemRoot}\\System32\\WindowsPowerShell\\v1.0\\Modules` };
+  return hasModulePath ? source : { ...source, PSModulePath: "" };
 };
 var runPowerShell = (script, timeout) => run(POWERSHELL, [...POWERSHELL_ARGS, script], timeout, powerShellEnv());
 var gpuLoopScript = (parentPid) => `

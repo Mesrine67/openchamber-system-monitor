@@ -29,7 +29,7 @@ The preview only polls while its tab is visible, like inside OpenChamber.
 - A missing value is `null` or `unavailable`, never 0. A parser that cannot read its input returns `null`.
 - Every new source gets a pure parser and a fixture with real output. Strip serial numbers and other identifiers from fixtures.
 - Collectors never throw into the sampler; one failing source must not hide the others.
-- The service runs with a minimal environment (PATH, HOME, temp, locale, Windows system variables). Call system tools by absolute path first, then the bare name. Windows PowerShell hangs without `PSModulePath`, so always start it through `powerShellEnv()`; `scripts/smoke.mjs` uses the exact variable list OpenChamber passes.
+- The service runs with a minimal environment (PATH, HOME, temp, locale, Windows system variables). Call system tools by absolute path first, then the bare name. Windows PowerShell hangs when `PSModulePath` is unset or only the system folder, so always start it through `powerShellEnv()` (it sets it empty); `scripts/smoke.mjs` uses the exact variable list OpenChamber passes.
 - Frames are classic IIFE bundles in a sandboxed iframe: no network, no ESM, no Node APIs. Talk to the service only through `host.serviceRequest`.
 - Style with the host theme variables (`--oc-*`) and keep `color-scheme` following `data-oc-theme`; without it a dark host paints the iframe white.
 - New UI text goes into all 13 locales with the same placeholders; `test/frame.test.ts` enforces it.

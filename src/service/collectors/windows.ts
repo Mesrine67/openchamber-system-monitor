@@ -13,11 +13,13 @@ const POWERSHELL_ARGS = ['-NoLogo', '-NoProfile', '-NonInteractive', '-Execution
 /**
  * OpenChamber starts services with a minimal environment that has no
  * `PSModulePath`. Windows PowerShell then hangs before running anything, even
- * `Write-Output 1`, so it gets the system module path back.
+ * `Write-Output 1`. Measured on a GitHub Windows runner: unset or set to the
+ * system module folder it hangs; empty it starts in under a second and still
+ * loads the CIM cmdlets.
  */
 export const powerShellEnv = (source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv => {
   const hasModulePath = Object.keys(source).some((name) => name.toUpperCase() === 'PSMODULEPATH');
-  return hasModulePath ? source : { ...source, PSModulePath: `${systemRoot}\\System32\\WindowsPowerShell\\v1.0\\Modules` };
+  return hasModulePath ? source : { ...source, PSModulePath: '' };
 };
 
 export const runPowerShell = (script: string, timeout?: number): Promise<ExecResult> =>
