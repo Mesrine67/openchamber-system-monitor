@@ -1,0 +1,6 @@
++-o AGXAcceleratorG17X  <class AGXAcceleratorG17X, id 0x100000526, registered, matched, active, busy 0 (508 ms), retain 108>
+    {
+      "PerformanceStatistics" = {"In use system memory (driver)"=0,"Alloc system memory"=4240949248,"Tiler Utilization %"=13,"recoveryCount"=0,"lastRecoveryTime"=0,"Renderer Utilization %"=36,"TiledSceneBytes"=1376256,"Device Utilization %"=37,"SplitSceneCount"=0,"Allocated PB Size"=171966464,"In use system memory"=989822976}
+      "model" = "Apple M5 Pro"
+    }
+    

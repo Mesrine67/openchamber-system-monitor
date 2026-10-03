@@ -1,0 +1,24 @@
+Filesystem           1024-blocks    Used Available Capacity Mounted on
+overlay              456943168 177670404 255987860  41% /
+tmpfs                    65536         0     65536   0% /dev
+shm                      65536         0     65536   0% /dev/shm
+/dev/md2             456943168 177670404 255987860  41% /etc/resolv.conf
+/dev/md2             456943168 177670404 255987860  41% /etc/hostname
+/dev/md2             456943168 177670404 255987860  41% /etc/hosts
+tmpfs                 32808372         0  32808372   0% /proc/acpi
+tmpfs                    65536         0     65536   0% /proc/interrupts
+tmpfs                    65536         0     65536   0% /proc/kcore
+tmpfs                    65536         0     65536   0% /proc/keys
+tmpfs                    65536         0     65536   0% /proc/latency_stats
+tmpfs                 32808372         0  32808372   0% /proc/scsi
+tmpfs                    65536         0     65536   0% /proc/timer_list
+tmpfs                 32808372         0  32808372   0% /sys/devices/virtual/powercap
+tmpfs                 32808372         0  32808372   0% /sys/firmware
+tmpfs                 32808372         0  32808372   0% /sys/devices/system/cpu/cpu0/thermal_throttle
+tmpfs                 32808372         0  32808372   0% /sys/devices/system/cpu/cpu1/thermal_throttle
+tmpfs                 32808372         0  32808372   0% /sys/devices/system/cpu/cpu2/thermal_throttle
+tmpfs                 32808372         0  32808372   0% /sys/devices/system/cpu/cpu3/thermal_throttle
+tmpfs                 32808372         0  32808372   0% /sys/devices/system/cpu/cpu4/thermal_throttle
+tmpfs                 32808372         0  32808372   0% /sys/devices/system/cpu/cpu5/thermal_throttle
+tmpfs                 32808372         0  32808372   0% /sys/devices/system/cpu/cpu6/thermal_throttle
+tmpfs                 32808372         0  32808372   0% /sys/devices/system/cpu/cpu7/thermal_throttle

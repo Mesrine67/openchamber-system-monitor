@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run build
+      - name: dist/ is up to date
+        if: runner.os == 'Linux'
+        run: git diff --exit-code -- dist
+      - name: Smoke test under Node
+        run: node scripts/smoke.mjs
+      - name: Smoke test under Bun
+        run: node scripts/smoke.mjs
+        env:
+          SMOKE_RUNTIME: bun
+
+  container:
+    name: Linux container with limits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Smoke test in a limited container
+        run: >
+          docker run --rm --cpus=1 --memory=512m
+          -e EXPECT_CONTAINER=1 -e EXPECT_LIMIT_CORES=1 -e EXPECT_MEMORY_TOTAL=536870912
+          -v "$PWD:/app:ro" -w /app node:22-alpine node scripts/smoke.mjs

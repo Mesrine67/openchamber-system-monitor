@@ -1,0 +1,59 @@
+{
+  "name": "openchamber-system-monitor",
+  "version": "1.0.0",
+  "description": "OpenChamber extension that shows CPU, memory, GPU and disk usage of the machine OpenChamber runs on.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fuchs-alexander/openchamber-system-monitor.git"
+  },
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node scripts/smoke.mjs",
+    "check": "bun run typecheck && bun test && bun run build",
+    "preview": "bun scripts/preview.ts"
+  },
+  "openchamber": {
+    "apiVersion": 1,
+    "engines": {
+      "openchamber": ">=2.0.1"
+    },
+    "contributes": {
+      "panel": {
+        "id": "system-monitor",
+        "name": "System Monitor",
+        "icon": "icon.svg",
+        "entry": "dist/panel/index.html"
+      },
+      "statusSection": {
+        "entry": "dist/status/index.html",
+        "title": "System",
+        "height": 96
+      },
+      "service": {
+        "entry": "dist/service/main.js",
+        "runtime": "host",
+        "permissions": {
+          "exec": [
+            "df",
+            "ioreg",
+            "vm_stat",
+            "sysctl",
+            "nvidia-smi",
+            "powershell"
+          ]
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@openchamber/sdk": "^2.1.0",
+    "@types/bun": "^1.4.2",
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2"
+  }
+}
