@@ -1,6 +1,6 @@
 {
   "name": "openchamber-system-monitor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "OpenChamber extension that shows CPU, memory, GPU and disk usage of the machine OpenChamber runs on.",
   "license": "MIT",
   "private": true,

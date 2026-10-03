@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Windows: disks and GPU now show up. PowerShell hung when started from OpenChamber, because the service environment has no `PSModulePath`.
+
 ## 1.0.0
 
 First release.
