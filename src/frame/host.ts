@@ -1,4 +1,6 @@
 import { connectHost, type HostClient } from '@openchamber/sdk';
+
+import type { Stats } from '../shared/stats.ts';
 import { applyHostReady } from '@openchamber/sdk/ui';
 
 import { messagesFor, type Messages } from '../i18n/messages.ts';
@@ -6,11 +8,16 @@ import { createPoller, type PollState } from './poller.ts';
 
 export type FrameContext = { state: PollState; t: Messages; locale: string; retry: () => void };
 
+export type FrameOptions = {
+  /** Every new reading, with the host client, for effects beyond drawing (the badge). */
+  onStats?: (stats: Stats, host: HostClient) => void;
+};
+
 /**
  * Shared wiring of both frames: theme and locale from the host, `/stats`
  * polling while the frame is visible, and a render on every change.
  */
-export const startFrame = (render: (context: FrameContext) => void): HostClient => {
+export const startFrame = (render: (context: FrameContext) => void, options: FrameOptions = {}): HostClient => {
   const host = connectHost();
   let state: PollState = { kind: 'loading' };
   let locale = 'en';
@@ -21,6 +28,7 @@ export const startFrame = (render: (context: FrameContext) => void): HostClient 
     onState: (next) => {
       state = next;
       draw();
+      if (next.kind === 'ready') options.onStats?.(next.stats, host);
     },
     visible: () => document.visibilityState === 'visible',
     schedule: (fn, ms) => {

@@ -21,7 +21,7 @@ You need OpenChamber 2.0.1 or newer, on desktop or web. VS Code and mobile do no
 2. Paste `https://github.com/fuchs-alexander/openchamber-system-monitor` and click **add**.
 3. Allow the local service when asked (see below for why).
 
-OpenChamber offers an **Update** button when a newer version is published here. To pin a version, add it to the URL: `…/openchamber-system-monitor#v1.0.1`.
+OpenChamber offers an **Update** button when a newer version is published here. To pin a version, add it to the URL: `…/openchamber-system-monitor#v1.0.2`.
 
 ## What it measures, and where
 

@@ -3,7 +3,7 @@ import { mountBadge, mountBanner, mountSpinner } from '@openchamber/sdk/ui';
 
 import { format, type Messages } from '../i18n/messages.ts';
 import { blockedText } from '../frame/blocked.ts';
-import { describeUnavailable, formatBytes, formatCores, formatNumber, formatPercent } from '../frame/format.ts';
+import { describeUnavailable, diskName, formatBytes, formatCores, formatNumber, formatPercent } from '../frame/format.ts';
 import { startFrame } from '../frame/host.ts';
 import { sparkline, SPARKLINE_CSS } from '../frame/sparkline.ts';
 import { BASE_CSS, createMeter, element, installStyle } from '../frame/ui.ts';
@@ -56,7 +56,7 @@ const warningText = (warning: Warning, stats: Stats, t: Messages): string => {
   if (warning.kind === 'gpu') return t.warnGpu;
   if (warning.kind === 'memory') return t.warnMemory;
   const disk = stats.disks.status === 'ok' ? stats.disks.items.find((item) => item.mount === warning.target) : undefined;
-  return format(t.warnDisk, { target: disk?.label ?? warning.target ?? t.disk });
+  return format(t.warnDisk, { target: disk ? diskName(disk, t) : warning.target ?? t.disk });
 };
 
 const cpuSection = (cpu: CpuStats | Unavailable, stats: Stats, t: Messages, locale: string): HTMLElement => {
@@ -177,7 +177,7 @@ const diskSection = (disks: DiskStats | Unavailable, t: Messages, locale: string
     const percent = diskPercent(disk);
     const meter = createMeter(node);
     meter.update({
-      label: disk.label ? `${disk.label} (${disk.mount})` : disk.mount,
+      label: diskName(disk, t),
       percent,
       value: format(t.usedOfTotal, { used: formatBytes(disk.used, locale), total: formatBytes(disk.total, locale) }),
       level: levelForPercent(percent),

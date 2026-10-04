@@ -1,5 +1,5 @@
 import { format, type Messages } from '../i18n/messages.ts';
-import type { Unavailable } from '../shared/stats.ts';
+import type { Disk, Unavailable } from '../shared/stats.ts';
 
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
 
@@ -29,4 +29,11 @@ export const describeUnavailable = (source: Unavailable, t: Messages): string =>
   if (source.reason === 'no-device') return t.reasonNoDevice;
   if (source.reason === 'unsupported') return t.reasonUnsupported;
   return t.reasonFailed;
+};
+
+/** "Windows (C:)", "My Stick (/Volumes/My Stick)", "System (/)", or the bare mount. */
+export const diskName = (disk: Pick<Disk, 'mount' | 'label'>, t: Messages): string => {
+  if (disk.label) return `${disk.label} (${disk.mount})`;
+  if (disk.mount === '/') return `${t.systemDisk} (/)`;
+  return disk.mount;
 };

@@ -13,6 +13,8 @@ import {
 } from './parse-cpu.ts';
 
 const CGROUP = '/sys/fs/cgroup';
+/** Swap barely moves; asking `sysctl` every tick would cost a process start for nothing. */
+export const SWAP_INTERVAL_MS = 10_000;
 
 const coreTimes = (): CoreTimes[] => os.cpus().map((cpu) => cpu.times);
 
@@ -56,6 +58,15 @@ export type CpuMemCollector = {
 export const createCpuMemCollector = (platform: Platform, container: boolean, now: () => number): CpuMemCollector => {
   let previousTimes: CoreTimes[] = [];
   let previousCgroup: { usageUsec: number; at: number } | null = null;
+  let swap: { value: { used: number; total: number } | null; at: number } | null = null;
+
+  const readSwap = async (): Promise<{ used: number; total: number } | null> => {
+    const at = now();
+    if (swap && at - swap.at < SWAP_INTERVAL_MS) return swap.value;
+    const result = await run(['/usr/sbin/sysctl', 'sysctl'], ['vm.swapusage']);
+    swap = { value: result.ok ? parseSwapUsage(result.stdout) : null, at };
+    return swap.value;
+  };
 
   const readCgroupBaseline = async () => {
     if (!container) return;
@@ -116,14 +127,10 @@ export const createCpuMemCollector = (platform: Platform, container: boolean, no
         };
       }
       if (platform === 'darwin') {
-        const [vm, swap] = await Promise.all([
-          run(['/usr/bin/vm_stat', 'vm_stat'], []),
-          run(['/usr/sbin/sysctl', 'sysctl'], ['vm.swapusage']),
-        ]);
+        const [vm, swapUsage] = await Promise.all([run(['/usr/bin/vm_stat', 'vm_stat'], []), readSwap()]);
         if (!vm.ok) return unavailable(vm.missing ? 'tool-missing' : 'failed', 'vm_stat');
         const used = parseVmStat(vm.stdout);
         if (used === null) return unavailable('failed');
-        const swapUsage = swap.ok ? parseSwapUsage(swap.stdout) : null;
         return {
           status: 'ok',
           used,

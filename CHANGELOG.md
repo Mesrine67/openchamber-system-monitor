@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+- The system disk is called "System (/)" in the panel and in warnings instead of just "/".
+- macOS: swap is read every 10 seconds instead of every 2, one process start less per tick.
+- Internal: the badge is set from a dedicated hook instead of the render callback.
+
 ## 1.0.1
 
 - Windows: disks and GPU now show up. PowerShell hung when started from OpenChamber, because the service environment has no `PSModulePath`.

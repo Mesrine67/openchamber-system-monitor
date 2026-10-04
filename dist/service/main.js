@@ -176,6 +176,7 @@ var limitedCpuUsage = (previousUsec, nextUsec, elapsedMs, limitCores) => {
 
 // src/service/collectors/cpu-mem.ts
 var CGROUP = "/sys/fs/cgroup";
+var SWAP_INTERVAL_MS = 1e4;
 var coreTimes = () => os.cpus().map((cpu) => cpu.times);
 var readCgroupCpu = async () => {
   const v2Limit = await readText(`${CGROUP}/cpu.max`);
@@ -209,6 +210,15 @@ var readCgroupMemory = async () => {
 var createCpuMemCollector = (platform, container, now) => {
   let previousTimes = [];
   let previousCgroup = null;
+  let swap = null;
+  const readSwap = async () => {
+    const at = now();
+    if (swap && at - swap.at < SWAP_INTERVAL_MS)
+      return swap.value;
+    const result = await run(["/usr/sbin/sysctl", "sysctl"], ["vm.swapusage"]);
+    swap = { value: result.ok ? parseSwapUsage(result.stdout) : null, at };
+    return swap.value;
+  };
   const readCgroupBaseline = async () => {
     if (!container)
       return;
@@ -265,16 +275,12 @@ var createCpuMemCollector = (platform, container, now) => {
         };
       }
       if (platform === "darwin") {
-        const [vm, swap] = await Promise.all([
-          run(["/usr/bin/vm_stat", "vm_stat"], []),
-          run(["/usr/sbin/sysctl", "sysctl"], ["vm.swapusage"])
-        ]);
+        const [vm, swapUsage] = await Promise.all([run(["/usr/bin/vm_stat", "vm_stat"], []), readSwap()]);
         if (!vm.ok)
           return unavailable(vm.missing ? "tool-missing" : "failed", "vm_stat");
         const used = parseVmStat(vm.stdout);
         if (used === null)
           return unavailable("failed");
-        const swapUsage = swap.ok ? parseSwapUsage(swap.stdout) : null;
         return {
           status: "ok",
           used,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { formatBytes, formatPercent } from '../src/frame/format.ts';
+import { diskName, formatBytes, formatPercent } from '../src/frame/format.ts';
 import { createPoller, TIMEOUTS_BEFORE_FAILED, type PollState } from '../src/frame/poller.ts';
 import { isStats, readStats } from '../src/frame/read-stats.ts';
 import { format, LOCALES, messagesFor, resolveLocale } from '../src/i18n/messages.ts';
@@ -171,5 +171,14 @@ describe('i18n', () => {
     expect(formatBytes(17.56 * 1024 ** 3, 'en')).toBe('17.6 GB');
     expect(formatBytes(512, 'en')).toBe('512 B');
     expect(formatPercent(47.4, 'en')).toBe('47%');
+  });
+});
+
+describe('disk names', () => {
+  const t = messagesFor('de');
+  test('system disk, labelled volume, bare mount', () => {
+    expect(diskName({ mount: '/', label: null }, t)).toBe('System (/)');
+    expect(diskName({ mount: 'C:', label: 'Windows' }, t)).toBe('Windows (C:)');
+    expect(diskName({ mount: '/data', label: null }, t)).toBe('/data');
   });
 });

@@ -112,14 +112,15 @@ const host = startFrame(({ state, t, locale, retry }) => {
     nodes.push(tag);
   }
   root.replaceChildren(...nodes);
-
+}, {
   // The badge counts active warnings and changes only when they do, so opening
   // the panel (which clears it) does not bring it straight back.
-  const key = warningKey(stats.warnings);
-  if (key !== badgeKey) {
+  onStats: (stats, client) => {
+    const key = warningKey(stats.warnings);
+    if (key === badgeKey) return;
     badgeKey = key;
-    void host.setBadge(stats.warnings.length > 0 ? stats.warnings.length : null).catch(() => undefined);
-  }
+    void client.setBadge(stats.warnings.length > 0 ? stats.warnings.length : null).catch(() => undefined);
+  },
 });
 
 // The Work Status panel sizes this frame to its content.
