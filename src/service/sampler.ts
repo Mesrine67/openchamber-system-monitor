@@ -1,3 +1,5 @@
+import os from 'node:os';
+
 import {
   busiestGpu,
   DISK_INTERVAL_MS,
@@ -146,7 +148,17 @@ export const createSampler = (deps: SamplerDeps): Sampler => {
     pushHistory(gpuHistory, busiestGpu(gpu.value));
     snapshot = {
       sampledAt: settledAt,
-      environment: { platform: deps.platform, container: deps.container },
+      environment: {
+        platform: deps.platform,
+        container: deps.container,
+        computer: {
+          hostName: os.hostname() || null,
+          operatingSystem: [deps.platform === 'win32' ? 'Windows' : deps.platform === 'darwin' ? 'macOS' : os.type(), os.release()]
+            .filter(Boolean)
+            .join(' ') || null,
+          architecture: os.arch() || null,
+        },
+      },
       cpu: cpu.value,
       memory: memory.value,
       gpus: gpu.value,

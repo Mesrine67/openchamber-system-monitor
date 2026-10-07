@@ -34,6 +34,8 @@ h2 .sub{font-weight:400;color:var(--oc-muted);overflow:hidden;text-overflow:elli
 .device+.device{margin-top:6px}
 .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .center{display:flex;align-items:center;gap:8px;color:var(--oc-muted);padding:24px 0}
+.info-row{display:flex;justify-content:space-between;gap:10px;color:var(--oc-muted);font-size:11px}
+.info-row span:last-child{text-align:right;color:var(--oc-fg);overflow-wrap:anywhere}
 `);
 
 const root = document.querySelector<HTMLElement>('#root');
@@ -187,6 +189,19 @@ const diskSection = (disks: DiskStats | Unavailable, t: Messages, locale: string
   return node;
 };
 
+const computerSection = (computer: Stats['environment']['computer'], t: Messages): HTMLElement => {
+  const node = section(t.computer);
+  const addRow = (label: string, value: string | null) => {
+    const row = element('div', 'info-row');
+    row.append(element('span', '', label), element('span', '', value || t.notAvailable));
+    node.append(row);
+  };
+  addRow(t.hostName, computer.hostName);
+  addRow(t.operatingSystem, computer.operatingSystem);
+  addRow(t.architecture, computer.architecture);
+  return node;
+};
+
 startFrame(({ state, t, locale, retry }) => {
   if (state.kind === 'loading') {
     const note = element('div', 'center');
@@ -209,25 +224,13 @@ startFrame(({ state, t, locale, retry }) => {
 
   const { stats } = state;
   const nodes: HTMLElement[] = [];
-  if (stats.environment.container || stats.warnings.length > 0) {
+  if (stats.environment.container) {
     const top = element('div', 'top');
-    if (stats.environment.container) {
-      const badge = element('span');
-      badge.title = t.containerHint;
-      mountBadge(badge, { label: t.container, tone: 'info' });
-      top.append(badge);
-    }
+    const badge = element('span');
+    badge.title = t.containerHint;
+    mountBadge(badge, { label: t.container, tone: 'info' });
+    top.append(badge);
     nodes.push(top);
-    if (stats.warnings.length > 0) {
-      const slot = element('div');
-      const critical = stats.warnings.some((warning) => warning.level === 'critical');
-      mountBanner(slot, {
-        tone: critical ? 'error' : 'warning',
-        title: t.warnings,
-        body: stats.warnings.map((warning) => warningText(warning, stats, t)).join('\n'),
-      });
-      nodes.push(slot);
-    }
   }
   nodes.push(
     cpuSection(stats.cpu, stats, t, locale),
@@ -235,5 +238,16 @@ startFrame(({ state, t, locale, retry }) => {
     gpuSection(stats.gpus, stats, t, locale),
     diskSection(stats.disks, t, locale),
   );
+  if (stats.environment.computer) nodes.push(computerSection(stats.environment.computer, t));
+  if (stats.warnings.length > 0) {
+    const slot = element('div');
+    const critical = stats.warnings.some((warning) => warning.level === 'critical');
+    mountBanner(slot, {
+      tone: critical ? 'error' : 'warning',
+      title: t.warnings,
+      body: stats.warnings.map((warning) => warningText(warning, stats, t)).join('\n'),
+    });
+    nodes.push(slot);
+  }
   root.replaceChildren(...nodes.filter((node) => node.childNodes.length > 0));
 });

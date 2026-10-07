@@ -487,7 +487,7 @@ var createGpuLoop = () => {
 };
 
 // src/service/collectors/disks.ts
-var WINDOWS_DISKS = 'Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, VolumeName, Size, FreeSpace | ConvertTo-Json -Compress';
+var WINDOWS_DISKS = 'Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=2 OR DriveType=3" | Select-Object DeviceID, VolumeName, Size, FreeSpace | ConvertTo-Json -Compress';
 var WINDOWS_TIMEOUT_MS = 1e4;
 var DF = ["/bin/df", "/usr/bin/df", "df"];
 var readDf = async () => {
@@ -734,6 +734,9 @@ var detectContainer = async (platform) => {
   });
 };
 
+// src/service/sampler.ts
+import os2 from "node:os";
+
 // src/service/warnings.ts
 var SUSTAINED_SAMPLES = 30;
 var sustainedHigh = (history) => {
@@ -834,12 +837,12 @@ var createSampler = (deps) => {
   };
   const tick = async (current) => {
     const now = deps.now();
-    const readDisks = due(disks, now) && now >= disksDueAt;
+    const readDisks2 = due(disks, now) && now >= disksDueAt;
     const [cpuResult, memoryResult, gpuResult, diskResult] = await Promise.all([
       due(cpu, now) ? safely(deps.cpuMem.cpu) : null,
       due(memory, now) ? safely(deps.cpuMem.memory) : null,
       due(gpu, now) ? safely(deps.gpu.read) : null,
-      readDisks ? safely(deps.disks) : null
+      readDisks2 ? safely(deps.disks) : null
     ]);
     if (current !== generation)
       return;
@@ -858,7 +861,15 @@ var createSampler = (deps) => {
     pushHistory(gpuHistory, busiestGpu(gpu.value));
     snapshot = {
       sampledAt: settledAt,
-      environment: { platform: deps.platform, container: deps.container },
+      environment: {
+        platform: deps.platform,
+        container: deps.container,
+        computer: {
+          hostName: os2.hostname() || null,
+          operatingSystem: [deps.platform === "win32" ? "Windows" : deps.platform === "darwin" ? "macOS" : os2.type(), os2.release()].filter(Boolean).join(" ") || null,
+          architecture: os2.arch() || null
+        }
+      },
       cpu: cpu.value,
       memory: memory.value,
       gpus: gpu.value,

@@ -1,4 +1,4 @@
-// Compact Work Status section: CPU, memory, busiest GPU and fullest disk.
+// Compact Work Status section: CPU, memory, busiest GPU and every disk.
 // It also owns the rail badge, because it is the frame most likely to be on screen.
 import { mountButton, mountProgress, mountSpinner } from '@openchamber/sdk/ui';
 
@@ -9,7 +9,6 @@ import { BASE_CSS, element, installStyle, toneFor } from '../frame/ui.ts';
 import {
   busiestGpu,
   diskPercent,
-  fullestDisk,
   warningKey,
   type Stats,
   type Unavailable,
@@ -58,17 +57,18 @@ const lines = (stats: Stats, t: Messages): Line[] => {
       ? { name: t.gpu, percent: busiest, level: levelOf(warnings, 'gpu'), missing: busiest === null ? t.notAvailable : undefined }
       : { name: t.gpu, percent: null, level: null, missing: missing(gpus) });
   }
-  const disk = fullestDisk(disks);
   if (disks.status !== 'ok') {
     result.push({ name: t.disk, percent: null, level: null, missing: missing(disks) });
-  } else if (disk) {
-    const systemDisk = disk.mount === '/' || /^[A-Z]:$/i.test(disk.mount);
-    result.push({
-      name: systemDisk ? t.disk : `${t.disk} ${disk.label ?? disk.mount}`,
-      title: disk.mount,
-      percent: diskPercent(disk),
-      level: levelOf(warnings, 'disk', disk.mount),
-    });
+  } else {
+    for (const disk of disks.items) {
+      const name = disk.mount === '/' ? `${t.systemDisk} /` : `${t.disk} ${disk.mount}`;
+      result.push({
+        name,
+        title: disk.label ? `${disk.label} (${disk.mount})` : disk.mount,
+        percent: diskPercent(disk),
+        level: levelOf(warnings, 'disk', disk.mount),
+      });
+    }
   }
   return result;
 };

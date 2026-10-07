@@ -8,7 +8,11 @@ import type { Stats } from '../src/shared/stats.ts';
 
 const stats = (sampledAt: number): Stats => ({
   sampledAt,
-  environment: { platform: 'linux', container: false },
+  environment: {
+    platform: 'linux',
+    container: false,
+    computer: { hostName: 'test-host', operatingSystem: 'Linux 6.0', architecture: 'x64' },
+  },
   cpu: { status: 'ok', total: 5, perCore: [5], load: null, cores: 1, limitCores: null, model: null },
   memory: { status: 'ok', used: 1, total: 2, swapUsed: null, swapTotal: null },
   gpus: { status: 'unavailable', reason: 'no-device', tool: null },

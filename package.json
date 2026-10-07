@@ -1,13 +1,13 @@
 {
   "name": "openchamber-system-monitor",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "OpenChamber extension that shows CPU, memory, GPU and disk usage of the machine OpenChamber runs on.",
   "license": "MIT",
   "private": true,
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/fuchs-alexander/openchamber-system-monitor.git"
+    "url": "https://github.com/Mesrine67/openchamber-system-monitor.git"
   },
   "scripts": {
     "build": "bun scripts/build.ts",

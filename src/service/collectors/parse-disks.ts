@@ -81,7 +81,7 @@ export const linuxDisks = (rows: DfRow[], container: boolean): Disk[] => {
     .sort(byMount);
 };
 
-/** `Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | … | ConvertTo-Json`: an object for one disk, an array for more. */
+/** `Get-CimInstance Win32_LogicalDisk -Filter "DriveType=2 OR DriveType=3" | … | ConvertTo-Json`: an object for one disk, an array for more. */
 export const parseWindowsDisks = (text: string): Disk[] | null => {
   let parsed: unknown;
   try {

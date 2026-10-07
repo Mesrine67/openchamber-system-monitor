@@ -63,7 +63,11 @@ export type Platform = 'darwin' | 'linux' | 'win32' | 'other';
 
 export type Stats = {
   sampledAt: number;
-  environment: { platform: Platform; container: boolean };
+  environment: {
+    platform: Platform;
+    container: boolean;
+    computer?: { hostName: string | null; operatingSystem: string | null; architecture: string | null };
+  };
   cpu: CpuStats | Unavailable;
   memory: MemoryStats | Unavailable;
   gpus: GpuStats | Unavailable;

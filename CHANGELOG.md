@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3
+
+- Windows: include removable volumes alongside fixed disks.
+- Work Status: show every detected disk instead of only the fullest one.
+- Panel: move alerts below the metrics and add computer name, OS version and architecture.
+
 ## 1.0.2
 
 - The system disk is called "System (/)" in the panel and in warnings instead of just "/".

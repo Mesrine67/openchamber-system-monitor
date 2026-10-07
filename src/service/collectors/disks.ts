@@ -4,7 +4,7 @@ import { darwinDisks, linuxDisks, parseDf, parseWindowsDisks } from './parse-dis
 import { runPowerShell } from './windows.ts';
 
 const WINDOWS_DISKS =
-  'Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, VolumeName, Size, FreeSpace | ConvertTo-Json -Compress';
+  'Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=2 OR DriveType=3" | Select-Object DeviceID, VolumeName, Size, FreeSpace | ConvertTo-Json -Compress';
 // PowerShell needs about a second to start; give the disk query more room than a tool call.
 const WINDOWS_TIMEOUT_MS = 10_000;
 
