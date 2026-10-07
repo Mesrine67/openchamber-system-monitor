@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 - 2026-10-08
+
+- Add a full-page System Monitor dashboard with overview, performance, storage, hardware, health, optimization and settings views while keeping Work Status compact.
+- Add bounded multi-rate network, process, disk-activity, battery and sensor collection across supported operating systems; unavailable values remain explicit.
+- Add configurable monitoring and alert settings, shared health assessment, safe diagnostics export, and local-only recommendations.
+- Match OpenChamber theme tokens and reduced-motion preferences, and document the V2 architecture and platform limits.
+
 ## 1.0.6
 
 - Rebuild the committed extension bundles so the latest Windows system, storage and adapter details are included in Git installs.

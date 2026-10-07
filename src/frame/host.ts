@@ -1,12 +1,17 @@
 import { connectHost, type HostClient } from '@openchamber/sdk';
+import type { GuestHostSurface } from '@openchamber/sdk';
 
 import type { Stats } from '../shared/stats.ts';
 import { applyHostReady } from '@openchamber/sdk/ui';
 
 import { messagesFor, type Messages } from '../i18n/messages.ts';
+import { monitorMessagesFor, type MonitorMessages } from '../i18n/monitor.ts';
 import { createPoller, type PollState } from './poller.ts';
 
-export type FrameContext = { state: PollState; t: Messages; locale: string; retry: () => void };
+export type FrameContext = {
+  state: PollState; t: Messages; tm: MonitorMessages; locale: string; retry: () => void;
+  host: HostClient; surface: GuestHostSurface; setPollingInterval: (ms: number) => void;
+};
 
 export type FrameOptions = {
   /** Every new reading, with the host client, for effects beyond drawing (the badge). */
@@ -21,7 +26,9 @@ export const startFrame = (render: (context: FrameContext) => void, options: Fra
   const host = connectHost();
   let state: PollState = { kind: 'loading' };
   let locale = 'en';
+  let surface: GuestHostSurface = 'panel';
   let t = messagesFor(locale);
+  let tm = monitorMessagesFor(locale);
 
   const poller = createPoller({
     request: () => host.serviceRequest({ method: 'GET', path: '/stats' }),
@@ -37,13 +44,18 @@ export const startFrame = (render: (context: FrameContext) => void, options: Fra
     },
   });
 
-  const draw = () => render({ state, t, locale, retry: poller.poll });
+  const draw = () => render({
+    state, t, tm, locale, retry: poller.poll, host, surface,
+    setPollingInterval: (ms) => poller.setInterval(ms),
+  });
 
   host.onReady((context) => {
     applyHostReady(context, document.documentElement);
+    surface = context.surface;
     if (context.locale !== locale) {
       locale = context.locale;
       t = messagesFor(locale);
+      tm = monitorMessagesFor(locale);
       document.documentElement.lang = locale;
     }
     draw();

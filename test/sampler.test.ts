@@ -4,6 +4,7 @@ import { createSampler, settle, type SamplerDeps } from '../src/service/sampler.
 import { evaluateWarnings, sustainedHigh, SUSTAINED_SAMPLES } from '../src/service/warnings.ts';
 import {
   HISTORY_LENGTH,
+  DEFAULT_MONITOR_SETTINGS,
   IDLE_STOP_MS,
   RETRY_UNAVAILABLE_MS,
   SAMPLE_INTERVAL_MS,
@@ -84,9 +85,10 @@ describe('sampler', () => {
     const stats = await sampler.stats();
     expect(h.calls.prime).toBe(1);
     expect(stats.cpu).toEqual(cpuOk(10));
-    expect(stats.disks.status).toBe('ok');
     expect(stats.history.cpu).toEqual([10]);
     expect(sampler.running()).toBe(true);
+    await flush();
+    expect((await sampler.stats()).disks.status).toBe('ok');
   });
 
   test('ticks every interval, disks every 30 s, history capped', async () => {
@@ -100,8 +102,51 @@ describe('sampler', () => {
     const stats = await sampler.stats();
     expect(h.calls.cpu).toBe(HISTORY_LENGTH + 6);
     expect(stats.history.cpu.length).toBe(HISTORY_LENGTH);
-    // 65 ticks × 2 s = 130 s → first read plus one every 30 s.
+    // The display history is capped; disks stay on their 30 s cadence.
     expect(h.calls.disks).toBe(5);
+  });
+
+  test('a slow disk collector cannot hold up fast CPU samples', async () => {
+    const h = harness();
+    let resolveDisk!: (value: Disk[] | Unavailable) => void;
+    h.deps.disks = async () => {
+      h.calls.disks += 1;
+      return await new Promise<Disk[] | Unavailable>((resolve) => { resolveDisk = resolve; });
+    };
+    const sampler = createSampler(h.deps);
+    const first = await sampler.stats();
+    expect(first.cpu).toEqual(cpuOk(10));
+    expect(h.calls.disks).toBe(1);
+
+    await h.advance(SAMPLE_INTERVAL_MS);
+    expect(h.calls.cpu).toBe(2);
+    expect(h.calls.disks).toBe(1);
+    expect(sampler.running()).toBe(true);
+
+    resolveDisk([{ mount: '/', label: null, used: 10, total: 100 }]);
+    await flush();
+    expect((await sampler.stats()).disks.status).toBe('ok');
+  });
+
+  test('long history windows downsample display data without weakening sustained alerts', async () => {
+    const h = harness();
+    h.values.cpu = () => cpuOk(96);
+    h.deps.settings = () => ({
+      ...DEFAULT_MONITOR_SETTINGS,
+      historyMinutes: 30,
+      thresholds: { ...DEFAULT_MONITOR_SETTINGS.thresholds, sustainedSeconds: 30 },
+    });
+    const sampler = createSampler(h.deps);
+    const first = await sampler.stats();
+    expect(first.history.sampleIntervalMs).toBe(30_000);
+    expect(first.history.cpu).toEqual([96]);
+    for (let index = 0; index < 15; index += 1) {
+      await h.advance(SAMPLE_INTERVAL_MS);
+      await sampler.stats();
+    }
+    const after = await sampler.stats();
+    expect(after.history.cpu.length).toBe(2);
+    expect(after.warnings).toContainEqual({ kind: 'cpu', target: null, level: 'critical' });
   });
 
   test('stops after 30 s without a request and drops the history', async () => {
@@ -134,8 +179,10 @@ describe('sampler', () => {
     h.values.gpu = () => unavailable('tool-missing', 'nvidia-smi');
     const sampler = createSampler(h.deps);
     const first = await sampler.stats();
-    expect(first.gpus).toEqual(unavailable('tool-missing', 'nvidia-smi'));
+    expect(first.gpus.status).toBe('unavailable');
     expect(first.history.gpu).toEqual([null]);
+    await flush();
+    expect((await sampler.stats()).gpus).toEqual(unavailable('tool-missing', 'nvidia-smi'));
     for (let elapsed = 0; elapsed < RETRY_UNAVAILABLE_MS - SAMPLE_INTERVAL_MS; elapsed += SAMPLE_INTERVAL_MS) {
       await h.advance(SAMPLE_INTERVAL_MS);
       await sampler.stats();
@@ -143,6 +190,7 @@ describe('sampler', () => {
     expect(h.calls.gpu).toBe(1);
     h.values.gpu = () => gpuOk(5);
     await h.advance(SAMPLE_INTERVAL_MS);
+    await flush();
     expect(h.calls.gpu).toBe(2);
     expect((await sampler.stats()).gpus).toEqual(gpuOk(5));
   });
@@ -193,7 +241,7 @@ describe('warnings', () => {
       gpuHistory: [99],
     });
     expect(warnings).toEqual([
-      { kind: 'cpu', target: null, level: 'warn' },
+      { kind: 'cpu', target: null, level: 'critical' },
       { kind: 'memory', target: null, level: 'warn' },
       { kind: 'disk', target: '/', level: 'critical' },
     ]);

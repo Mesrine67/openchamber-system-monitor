@@ -39,22 +39,33 @@ export const parseIoreg = (text: string): GpuDevice[] => {
   return devices;
 };
 
-/** `nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits` (MiB). */
+/** NVIDIA query output. Legacy four-column output remains accepted for older drivers. */
 export const parseNvidiaSmi = (text: string): GpuDevice[] => {
   const devices: GpuDevice[] = [];
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
     const parts = line.split(',').map((part) => part.trim());
-    // The name may itself contain commas; the three numbers are always last.
+    // NVIDIA's name may contain commas; use the known column count to isolate it.
     if (parts.length < 4) continue;
-    const total = numberOrNull(parts.pop());
-    const used = numberOrNull(parts.pop());
-    const utilization = numberOrNull(parts.pop());
+    const extended = parts.length >= 9;
+    const columns = extended ? parts.slice(-8) : parts.slice(-3);
+    const name = parts.slice(0, parts.length - columns.length).join(', ') || 'NVIDIA GPU';
+    const [utilizationText, usedText, totalText, temperatureText, frequencyText, powerText, fanText, driverText] = columns;
+    const utilization = numberOrNull(utilizationText);
+    const used = numberOrNull(usedText);
+    const total = numberOrNull(totalText);
     devices.push({
-      name: parts.join(', ') || 'NVIDIA GPU',
+      name,
       utilization: percent(utilization),
       memUsed: used === null ? null : used * MIB,
       memTotal: total === null ? null : total * MIB,
+      ...(extended ? {
+        temperatureC: numberOrNull(temperatureText),
+        frequencyMHz: numberOrNull(frequencyText),
+        powerW: numberOrNull(powerText),
+        fanPercent: numberOrNull(fanText),
+        driverVersion: driverText && driverText !== 'N/A' ? driverText : null,
+      } : {}),
     });
   }
   return devices;

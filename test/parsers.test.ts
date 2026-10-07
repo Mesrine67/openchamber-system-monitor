@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
-import { cpuUsage, limitedCpuUsage, parseCfsQuota, parseCpuMax, parseCpuStatUsage } from '../src/service/collectors/parse-cpu.ts';
+import { cpuUsage, limitedCpuUsage, parseCfsQuota, parseCpuFrequencyMHz, parseCpuMax, parseCpuStatUsage } from '../src/service/collectors/parse-cpu.ts';
 import { darwinDisks, linuxDisks, parseDf, parseWindowsDisks } from '../src/service/collectors/parse-disks.ts';
 import { parseAmdCards, parseIoreg, parseNvidiaSmi, parseWindowsGpu } from '../src/service/collectors/parse-gpu.ts';
 import { parseCgroupMemory, parseMeminfo, parseSwapUsage, parseVmStat } from '../src/service/collectors/parse-memory.ts';
@@ -35,6 +35,9 @@ describe('memory', () => {
       available: 46351904 * KIB,
       swapTotal: 33520636 * KIB,
       swapFree: 26849020 * KIB,
+      cached: 27601496 * KIB,
+      committed: 43725760 * KIB,
+      commitLimit: 66329008 * KIB,
     });
     expect(parseMeminfo('MemTotal: 1 kB')).toBeNull();
   });
@@ -59,6 +62,11 @@ describe('cpu', () => {
   test('usage per core and overall', () => {
     const usage = cpuUsage([core(0, 0), core(0, 0)], [core(50, 50), core(100, 0)]);
     expect(usage).toEqual({ total: 75, perCore: [50, 100] });
+  });
+
+  test('current frequency averages only valid Linux sysfs readings', () => {
+    expect(parseCpuFrequencyMHz(['3000000', '2500000', 'unknown'])).toBe(2750);
+    expect(parseCpuFrequencyMHz(['0', 'unknown'])).toBeNull();
   });
 
   test('no baseline or changed core count is unknown', () => {
@@ -114,6 +122,16 @@ describe('gpu', () => {
     expect(parseNvidiaSmi('')).toEqual([]);
   });
 
+  test('nvidia-smi includes optional sensor values when the driver reports them', () => {
+    expect(parseNvidiaSmi('NVIDIA, Fast GPU, 72, 4096, 8192, 66, 1500, 210.5, 55, 550.12')).toEqual([{
+      name: 'NVIDIA, Fast GPU', utilization: 72, memUsed: 4096 * 1024 * 1024, memTotal: 8192 * 1024 * 1024,
+      temperatureC: 66, frequencyMHz: 1500, powerW: 210.5, fanPercent: 55, driverVersion: '550.12',
+    }]);
+    expect(parseNvidiaSmi('GPU, 2, 1024, 8192, N/A, N/A, N/A, N/A, N/A')[0]).toMatchObject({
+      name: 'GPU', temperatureC: null, frequencyMHz: null, powerW: null, fanPercent: null, driverVersion: null,
+    });
+  });
+
   test('AMD sysfs keeps only AMD cards with a busy counter', () => {
     expect(parseAmdCards([
       { card: 'card0', vendor: '0x1002\n', busy: '42\n', vramUsed: '1048576\n', vramTotal: '8589934592\n' },
@@ -160,14 +178,14 @@ describe('disks', () => {
 
   test('Linux host: real devices only, percent like df', () => {
     expect(linuxDisks(parseDf(fixture('linux-df.txt')), false)).toEqual([
-      { mount: '/', label: null, used: 177670168 * KIB, total: (177670168 + 255988096) * KIB },
-      { mount: '/boot', label: null, used: 206200 * KIB, total: (206200 + 753904) * KIB },
+      { mount: '/', label: null, used: 177670168 * KIB, total: (177670168 + 255988096) * KIB, device: '/dev/md2' },
+      { mount: '/boot', label: null, used: 206200 * KIB, total: (206200 + 753904) * KIB, device: '/dev/md1' },
     ]);
   });
 
   test('Linux container: overlay root, no /etc bind mounts or /proc masks', () => {
     expect(linuxDisks(parseDf(fixture('linux-container-df.txt')), true)).toEqual([
-      { mount: '/', label: null, used: 177670404 * KIB, total: (177670404 + 255987860) * KIB },
+      { mount: '/', label: null, used: 177670404 * KIB, total: (177670404 + 255987860) * KIB, device: 'overlay' },
     ]);
   });
 
@@ -194,7 +212,7 @@ describe('disks', () => {
 
   test('Windows: one disk is an object, more are an array', () => {
     expect(parseWindowsDisks(fixture('windows-disks-one.json'))).toEqual([
-      { mount: 'C:', label: 'Windows', used: 136363114496 - 40536576000, total: 136363114496 },
+      { mount: 'C:', label: 'Windows', used: 136363114496 - 40536576000, total: 136363114496, device: 'C:' },
     ]);
     const many = parseWindowsDisks(fixture('windows-disks-many.json'));
     expect(many?.map((disk) => [disk.mount, disk.label])).toEqual([['C:', 'Windows'], ['D:', null]]);

@@ -4,6 +4,7 @@ import { diskName, formatBytes, formatPercent } from '../src/frame/format.ts';
 import { createPoller, TIMEOUTS_BEFORE_FAILED, type PollState } from '../src/frame/poller.ts';
 import { isStats, readStats } from '../src/frame/read-stats.ts';
 import { format, LOCALES, messagesFor, resolveLocale } from '../src/i18n/messages.ts';
+import { monitorMessagesFor } from '../src/i18n/monitor.ts';
 import type { Stats } from '../src/shared/stats.ts';
 
 const stats = (sampledAt: number): Stats => ({
@@ -14,11 +15,17 @@ const stats = (sampledAt: number): Stats => ({
     computer: { hostName: 'test-host', operatingSystem: 'Linux 6.0', architecture: 'x64' },
   },
   cpu: { status: 'ok', total: 5, perCore: [5], load: null, cores: 1, limitCores: null, model: null },
-  memory: { status: 'ok', used: 1, total: 2, swapUsed: null, swapTotal: null },
+  memory: { status: 'ok', used: 1, total: 2, available: 1, cached: null, committed: null, commitLimit: null, pressure: null, swapUsed: null, swapTotal: null },
   gpus: { status: 'unavailable', reason: 'no-device', tool: null },
   disks: { status: 'ok', items: [], sampledAt },
-  history: { cpu: [5], gpu: [null] },
+  diskActivity: { status: 'unavailable', reason: 'unsupported', tool: null },
+  network: { status: 'unavailable', reason: 'unsupported', tool: null },
+  processes: { status: 'unavailable', reason: 'unsupported', tool: null },
+  battery: { status: 'unavailable', reason: 'no-device', tool: null },
+  sensors: { status: 'unavailable', reason: 'no-device', tool: null },
+  history: { cpu: [5], gpu: [null], memory: [50], networkDown: [null], networkUp: [null], sampleIntervalMs: 2000 },
   warnings: [],
+  health: { state: 'healthy', warningCount: 0, criticalCount: 0, unavailableCount: 0 },
 });
 
 class HostError extends Error {
@@ -144,6 +151,22 @@ describe('i18n', () => {
 
   test('all 13 OpenChamber locales are present', () => {
     expect(Object.keys(LOCALES).sort()).toEqual(['de', 'en', 'es', 'fr', 'ja', 'ko', 'nl', 'pl', 'pt-BR', 'tr', 'uk', 'zh-CN', 'zh-TW']);
+  });
+
+  test('System Monitor messages are complete and placeholder-safe in every host locale', () => {
+    const english = monitorMessagesFor('en');
+    const monitorKeys = Object.keys(english).sort();
+    for (const locale of Object.keys(LOCALES)) {
+      const messages = monitorMessagesFor(locale);
+      expect(Object.keys(messages).sort()).toEqual(monitorKeys);
+      for (const key of monitorKeys) {
+        const text = Reflect.get(messages, key);
+        expect(typeof text === 'string' && text.trim().length > 0).toBe(true);
+        expect(placeholders(String(text))).toEqual(placeholders(String(Reflect.get(english, key))));
+      }
+    }
+    expect(monitorMessagesFor('fr').overview).not.toBe(english.overview);
+    expect(monitorMessagesFor('de').overview).not.toBe(english.overview);
   });
 
   for (const [locale, messages] of Object.entries(LOCALES)) {

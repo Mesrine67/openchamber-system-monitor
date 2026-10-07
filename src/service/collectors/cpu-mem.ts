@@ -1,12 +1,14 @@
 import os from 'node:os';
+import { readdir } from 'node:fs/promises';
 
 import { unavailable, type CpuStats, type MemoryStats, type Platform, type Unavailable } from '../../shared/stats.ts';
 import { readText, run } from './exec.ts';
-import { parseCgroupMemory, parseMeminfo, parseSwapUsage, parseVmStat, parseWindowsPageFile } from './parse-memory.ts';
+import { parseCgroupMemory, parseMemoryPressure, parseMeminfo, parseSwapUsage, parseVmStat, parseWindowsPageFile } from './parse-memory.ts';
 import { runPowerShell } from './windows.ts';
 import {
   cpuUsage,
   limitedCpuUsage,
+  parseCpuFrequencyMHz,
   parseCfsQuota,
   parseCpuMax,
   parseCpuStatUsage,
@@ -18,7 +20,17 @@ const CGROUP = '/sys/fs/cgroup';
 export const SWAP_INTERVAL_MS = 10_000;
 const WINDOWS_PAGEFILE_QUERY = 'Get-CimInstance Win32_PageFileUsage | Select-Object AllocatedBaseSize, CurrentUsage | ConvertTo-Json -Compress';
 
-const coreTimes = (): CoreTimes[] => os.cpus().map((cpu) => cpu.times);
+const readLinuxFrequencyMHz = async (): Promise<number | null> => {
+  let entries: string[];
+  try { entries = await readdir('/sys/devices/system/cpu'); }
+  catch { return null; }
+  const cores = entries.filter((name) => /^cpu\d+$/.test(name)).slice(0, 256);
+  const values = await Promise.all(cores.map(async (core) =>
+    (await readText(`/sys/devices/system/cpu/${core}/cpufreq/scaling_cur_freq`))
+      ?? await readText(`/sys/devices/system/cpu/${core}/cpufreq/cpuinfo_cur_freq`),
+  ));
+  return parseCpuFrequencyMHz(values.filter((value): value is string => value !== null));
+};
 
 /** Container CPU limit in cores and the cgroup's usage counter (µs); v2 first, then v1. */
 const readCgroupCpu = async (): Promise<{ limitCores: number | null; usageUsec: number | null }> => {
@@ -88,19 +100,21 @@ export const createCpuMemCollector = (platform: Platform, container: boolean, no
 
   return {
     prime: async () => {
-      previousTimes = coreTimes();
+      previousTimes = os.cpus().map((cpu) => cpu.times);
       await readCgroupBaseline();
     },
 
     cpu: async () => {
-      const times = coreTimes();
+      const cpuData = os.cpus();
+      const times = cpuData.map((cpu) => cpu.times);
       const host = cpuUsage(previousTimes, times);
       previousTimes = times;
       const load = platform === 'win32' ? null : os.loadavg();
       const base = {
         cores: times.length,
-        model: os.cpus()[0]?.model.trim() || null,
+        model: cpuData[0]?.model.trim() || null,
         load: load ? [load[0] ?? 0, load[1] ?? 0, load[2] ?? 0] as [number, number, number] : null,
+        frequencyMHz: platform === 'linux' ? await readLinuxFrequencyMHz() : null,
       };
 
       if (container) {
@@ -130,6 +144,10 @@ export const createCpuMemCollector = (platform: Platform, container: boolean, no
           used: limited.used,
           total: limited.total,
           available: Math.max(0, limited.total - limited.used),
+          cached: null,
+          committed: null,
+          commitLimit: null,
+          pressure: null,
           swapUsed: null,
           swapTotal: null,
         };
@@ -142,6 +160,10 @@ export const createCpuMemCollector = (platform: Platform, container: boolean, no
           used: info.total - info.available,
           total: info.total,
           available: info.available,
+          cached: info.cached,
+          committed: info.committed,
+          commitLimit: info.commitLimit,
+          pressure: parseMemoryPressure(await readText(container ? `${CGROUP}/memory.pressure` : '/proc/pressure/memory') ?? ''),
           swapUsed: info.swapTotal > 0 ? info.swapTotal - info.swapFree : null,
           swapTotal: info.swapTotal > 0 ? info.swapTotal : null,
         };
@@ -156,6 +178,10 @@ export const createCpuMemCollector = (platform: Platform, container: boolean, no
           used,
           total: os.totalmem(),
           available: Math.max(0, os.totalmem() - used),
+          cached: null,
+          committed: null,
+          commitLimit: null,
+          pressure: null,
           swapUsed: swapUsage && swapUsage.total > 0 ? swapUsage.used : null,
           swapTotal: swapUsage && swapUsage.total > 0 ? swapUsage.total : null,
         };
@@ -169,6 +195,10 @@ export const createCpuMemCollector = (platform: Platform, container: boolean, no
         used,
         total,
         available: total - used,
+        cached: null,
+        committed: null,
+        commitLimit: null,
+        pressure: null,
         swapUsed: pageFile?.used ?? null,
         swapTotal: pageFile?.total ?? null,
       };

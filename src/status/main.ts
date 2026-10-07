@@ -1,120 +1,134 @@
-// Compact Work Status section: CPU, memory, busiest GPU and every disk.
-// It also owns the rail badge, because it is the frame most likely to be on screen.
-import { mountButton, mountProgress, mountSpinner } from '@openchamber/sdk/ui';
+// Compact Work Status section: health plus CPU, memory, busiest GPU and the fullest disk.
+import { mountBadge, mountButton, mountProgress, mountSpinner, type BadgeHandle, type ProgressHandle, type Tone } from '@openchamber/sdk/ui';
 
 import type { Messages } from '../i18n/messages.ts';
-import { describeUnavailable, formatPercent } from '../frame/format.ts';
+import type { MonitorMessages } from '../i18n/monitor.ts';
+import { describeUnavailable, diskName, formatPercent } from '../frame/format.ts';
 import { startFrame } from '../frame/host.ts';
 import { BASE_CSS, element, installStyle, toneFor } from '../frame/ui.ts';
-import {
-  busiestGpu,
-  diskPercent,
-  warningKey,
-  type Stats,
-  type Unavailable,
-  type Warning,
-  type WarningLevel,
-} from '../shared/stats.ts';
+import { busiestGpu, diskPercent, fullestDisk, warningKey, type Stats, type WarningLevel } from '../shared/stats.ts';
 import { blockedText } from '../frame/blocked.ts';
 
 installStyle(`${BASE_CSS}
 html,body{background:transparent;overflow:hidden}
-#root{display:grid;grid-template-columns:auto minmax(40px,1fr) auto;column-gap:8px;row-gap:4px;align-items:center;padding:2px 0 4px}
-.line{display:contents}
-.line .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
-.line .pct{text-align:right;color:var(--oc-muted);min-width:34px}
-.line .pct.warn{color:var(--oc-warning-text)}
-.line .pct.critical{color:var(--oc-error-text)}
-.line .na{grid-column:2/4;color:var(--oc-muted);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.line .oc-sdk-progress-label{display:none}
-.note,.tag{grid-column:1/-1}
+#root{display:flex;flex-direction:column;gap:3px;padding:2px 0 4px}
+.summary{display:flex;align-items:center;gap:6px;min-height:17px}
+.summary-title{font-weight:600;font-size:11px}
+.line{display:grid;grid-template-columns:minmax(70px,110px) minmax(40px,1fr) 38px;gap:7px;align-items:center;min-height:15px}
+.line[hidden]{display:none!important}.name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--oc-muted);font-size:11px}
+.pct{text-align:right;color:var(--oc-muted);font-size:11px;font-variant-numeric:tabular-nums}
+.pct.warn{color:var(--oc-warning-text)}.pct.critical{color:var(--oc-error-text)}
+.line .oc-sdk-progress{margin:0;height:5px}.line .oc-sdk-progress-label{display:none}
+.missing{grid-column:2/4;color:var(--oc-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .note{display:flex;align-items:center;gap:8px;color:var(--oc-muted);min-height:20px}
-.tag{color:var(--oc-muted);font-size:11px}
 `);
 
 const root = document.querySelector<HTMLElement>('#root');
 if (!root) throw new Error('Missing root');
 
-type Line = { name: string; title?: string; percent: number | null; level: WarningLevel | null; missing?: string };
+const summary = element('div', 'summary');
+const summaryTitle = element('span', 'summary-title', 'System');
+const healthSlot = element('span');
+const healthBadge: BadgeHandle = mountBadge(healthSlot, { label: '…', tone: 'neutral' });
+summary.append(summaryTitle, healthSlot);
+const containerBadgeSlot = element('span');
+summary.append(containerBadgeSlot);
+root.replaceChildren(summary);
 
-const levelOf = (warnings: Warning[], kind: Warning['kind'], target: string | null = null): WarningLevel | null =>
-  warnings.find((warning) => warning.kind === kind && (target === null || warning.target === target))?.level ?? null;
-
-const lines = (stats: Stats, t: Messages): Line[] => {
-  const missing = (source: Unavailable) => describeUnavailable(source, t);
-  const result: Line[] = [];
-  const { cpu, memory, gpus, disks, warnings } = stats;
-  result.push(cpu.status === 'ok'
-    ? { name: t.cpu, percent: cpu.total, level: levelOf(warnings, 'cpu') }
-    : { name: t.cpu, percent: null, level: null, missing: missing(cpu) });
-  result.push(memory.status === 'ok'
-    ? { name: t.memory, percent: memory.total > 0 ? (memory.used / memory.total) * 100 : null, level: levelOf(warnings, 'memory') }
-    : { name: t.memory, percent: null, level: null, missing: missing(memory) });
-  // No GPU at all is normal on servers; the compact view drops the row instead of saying so.
-  if (gpus.status === 'ok' || gpus.reason !== 'no-device') {
-    const busiest = busiestGpu(gpus);
-    result.push(gpus.status === 'ok'
-      ? { name: t.gpu, percent: busiest, level: levelOf(warnings, 'gpu'), missing: busiest === null ? t.notAvailable : undefined }
-      : { name: t.gpu, percent: null, level: null, missing: missing(gpus) });
-  }
-  if (disks.status !== 'ok') {
-    result.push({ name: t.disk, percent: null, level: null, missing: missing(disks) });
-  } else {
-    for (const disk of disks.items) {
-      const name = disk.mount === '/' ? `${t.systemDisk} /` : `${t.disk} ${disk.mount}`;
-      result.push({
-        name,
-        title: disk.label ? `${disk.label} (${disk.mount})` : disk.mount,
-        percent: diskPercent(disk),
-        level: levelOf(warnings, 'disk', disk.mount),
-      });
-    }
-  }
-  return result;
+type CompactLine = {
+  node: HTMLElement; name: HTMLElement; value: HTMLElement; progressSlot: HTMLElement; progress: ProgressHandle;
+  update: (label: string, percent: number | null, missing: string | null, level: WarningLevel | null, locale: string) => void;
 };
-
-const drawLine = (line: Line, locale: string): HTMLElement => {
+const makeLine = (label: string): CompactLine => {
   const node = element('div', 'line');
-  const name = element('span', 'name', line.name);
-  if (line.title) name.title = line.title;
-  node.append(name);
-  if (line.missing || line.percent === null) {
-    node.append(element('span', 'na', line.missing ?? ''));
-    return node;
-  }
-  const slot = element('div');
-  mountProgress(slot, { value: line.percent, tone: toneFor(line.level), label: line.name });
-  node.append(slot, element('span', `pct${line.level ? ` ${line.level}` : ''}`, formatPercent(line.percent, locale)));
-  return node;
+  node.hidden = true;
+  const name = element('span', 'name', label);
+  const progressSlot = element('div');
+  const progress = mountProgress(progressSlot, { value: 0, tone: 'primary', label });
+  const value = element('span', 'pct');
+  node.append(name, progressSlot, value);
+  root?.append(node);
+  return {
+    node, name, value, progressSlot, progress,
+    update: (nextLabel, percent, missing, level, locale) => {
+      name.textContent = nextLabel;
+      node.hidden = false;
+      if (percent === null) {
+        progressSlot.hidden = true;
+        value.textContent = '';
+        value.className = 'pct';
+        const note = element('span', 'missing', missing ?? '');
+        const existing = node.querySelector('.missing');
+        if (existing) existing.replaceWith(note); else node.append(note);
+        return;
+      }
+      node.querySelector('.missing')?.remove();
+      progressSlot.hidden = false;
+      progress.update({ value: percent, tone: toneFor(level), label: nextLabel });
+      value.textContent = formatPercent(percent, locale);
+      value.className = `pct${level ? ` ${level}` : ''}`;
+    },
+  };
 };
+const cpuLine = makeLine('CPU');
+const memoryLine = makeLine('Memory');
+const gpuLine = makeLine('GPU');
+const diskLine = makeLine('Disk');
+const note = element('div', 'note');
+root.append(note);
+
+const warningLevel = (stats: Stats, kind: 'cpu' | 'memory' | 'gpu' | 'disk', target?: string | null): WarningLevel | null =>
+  stats.warnings.find((item) => item.kind === kind && (target === undefined || item.target === target))?.level ?? null;
+
+const stateLabel = (stats: Stats, tm: MonitorMessages): { label: string; tone: Tone } => stats.health.state === 'critical'
+  ? { label: tm.critical, tone: 'error' }
+  : stats.health.state === 'attention' ? { label: tm.attention, tone: 'warning' }
+    : stats.health.state === 'unavailable' ? { label: tm.unavailableState, tone: 'neutral' }
+      : { label: tm.healthy, tone: 'success' };
 
 let badgeKey: string | null = null;
+let reportedHeight = -1;
+let host: ReturnType<typeof startFrame>;
 
-const host = startFrame(({ state, t, locale, retry }) => {
+host = startFrame(({ state, t, tm, locale, retry }) => {
+  note.replaceChildren();
   if (state.kind === 'loading') {
-    const note = element('div', 'note');
     mountSpinner(note, { size: 'sm', label: t.measuring });
-    root.replaceChildren(note);
+    note.hidden = false;
     return;
   }
   if (state.kind === 'blocked') {
-    const note = element('div', 'note');
-    note.append(element('span', '', blockedText(state.reason, t).body));
+    const message = blockedText(state.reason, t);
+    note.append(element('span', '', message.body));
     if (state.reason === 'failed') mountButton(note, { label: t.retry, size: 'xs', variant: 'ghost', onClick: retry });
-    root.replaceChildren(note);
+    note.hidden = false;
     return;
   }
+
+  note.hidden = true;
   const { stats } = state;
-  const nodes = lines(stats, t).map((line) => drawLine(line, locale));
+  const stateInfo = stateLabel(stats, tm);
+  healthBadge.update({ label: stateInfo.label, tone: stateInfo.tone });
+  containerBadgeSlot.replaceChildren();
   if (stats.environment.container) {
-    const tag = element('div', 'tag', t.container);
-    tag.title = t.containerHint;
-    nodes.push(tag);
+    mountBadge(containerBadgeSlot, { label: t.container, tone: 'info' });
+    containerBadgeSlot.title = t.containerHint;
   }
-  root.replaceChildren(...nodes);
+  cpuLine.update(t.cpu, stats.cpu.status === 'ok' ? stats.cpu.total : null,
+    stats.cpu.status === 'ok' ? null : describeUnavailable(stats.cpu, t), warningLevel(stats, 'cpu'), locale);
+  const memoryPercent = stats.memory.status === 'ok' && stats.memory.total > 0 ? stats.memory.used / stats.memory.total * 100 : null;
+  memoryLine.update(t.memory, memoryPercent,
+    stats.memory.status === 'ok' ? null : describeUnavailable(stats.memory, t), warningLevel(stats, 'memory'), locale);
+  const gpu = busiestGpu(stats.gpus);
+  if (stats.gpus.status === 'unavailable' && stats.gpus.reason === 'no-device') gpuLine.node.hidden = true;
+  else gpuLine.update(t.gpu, gpu,
+    stats.gpus.status === 'ok' ? (gpu === null ? t.notAvailable : null) : describeUnavailable(stats.gpus, t), warningLevel(stats, 'gpu'), locale);
+  const disk = fullestDisk(stats.disks);
+  diskLine.update(disk ? diskName(disk, t) : t.disk, disk ? diskPercent(disk) : null,
+    disk ? null : stats.disks.status === 'ok' ? t.noDisks : describeUnavailable(stats.disks, t),
+    warningLevel(stats, 'disk', disk?.mount ?? null), locale);
+
 }, {
-  // The badge counts active warnings and changes only when they do, so opening
-  // the panel (which clears it) does not bring it straight back.
   onStats: (stats, client) => {
     const key = warningKey(stats.warnings);
     if (key === badgeKey) return;
@@ -123,8 +137,6 @@ const host = startFrame(({ state, t, locale, retry }) => {
   },
 });
 
-// The Work Status panel sizes this frame to its content.
-let reportedHeight = -1;
 new ResizeObserver(() => {
   const height = Math.ceil(root.getBoundingClientRect().height);
   if (height === reportedHeight) return;

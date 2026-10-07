@@ -1,79 +1,82 @@
 # System Monitor for OpenChamber
 
-An [OpenChamber](https://github.com/openchamber/openchamber) extension that shows how busy the machine running OpenChamber is: CPU, memory, GPU and disks.
+System Monitor is a local OpenChamber extension for monitoring and diagnosing the machine that runs the OpenChamber service. It keeps Work Status compact, offers a focused rail panel, and contributes a full-page dashboard for deeper inspection.
 
-<p>
-  <img src="docs/panel.png" alt="System Monitor panel with CPU, memory, GPU and disk usage" width="420">
-  <img src="docs/status.png" alt="Compact System section in the Work Status panel" width="300">
-</p>
+## What it includes
 
-- **Rail panel**: CPU overall and per core with a two-minute chart and load average, memory and swap, every GPU with utilization and memory, every disk.
-- **Work Status section**: four compact bars for CPU, memory, the busiest GPU and the fullest disk.
-- **Badge**: the rail icon counts active warnings, so you notice a full disk without opening anything.
-- **Containers**: inside a Linux container it shows the container's CPU and memory limits, marked as *Container*.
-- Follows the OpenChamber theme and language (all 13 OpenChamber locales).
+- **Work Status:** compact health, CPU, memory, GPU, and fullest-volume readings.
+- **Rail panel:** Overview, Performance, Storage, Hardware, Health, Optimization, and Settings views. CPU history can switch between overall and per-core; storage separates capacity from activity.
+- **Full-page dashboard:** open System Monitor from OpenChamber’s **Extension pages** menu. The SDK does not let an extension open its contributed page programmatically; the rail button explains where to find it.
+- **Health and recommendations:** shared health state, configurable warning/critical thresholds, and read-only suggestions. The only current system action opens Windows Storage settings.
+- **Diagnostics:** copy a sanitized Markdown/JSON summary that omits hostnames, user paths, disk identifiers, and process lists.
+- **History:** bounded 60-point display history. A 2/5/15/30-minute window uses a matching 2/5/15/30-second sample interval; sustained alerts keep their own short high-resolution buffer.
+
+The UI uses OpenChamber SDK controls and `--oc-*` theme tokens. It follows host theme changes, supports reduced-motion preferences, and avoids recreating the overview DOM on each fast update.
 
 ## Install
 
-You need OpenChamber 2.0.1 or newer, on desktop or web. VS Code and mobile do not load extensions.
+You need OpenChamber 2.0.1 or newer on desktop or web. Extensions are not loaded in VS Code or mobile clients.
 
 1. Open **Settings → Extensions**.
-2. Paste `https://github.com/fuchs-alexander/openchamber-system-monitor` and click **add**.
-3. Allow the local service when asked (see below for why).
+2. Add `https://github.com/Mesrine67/openchamber-system-monitor`.
+3. Review and allow the local service permissions shown by OpenChamber.
+4. Open the rail panel for live metrics. Use **Extension pages → System Monitor** for the full dashboard.
 
-OpenChamber offers an **Update** button when a newer version is published here. To pin a version, add it to the URL: `…/openchamber-system-monitor#v1.0.2`.
+OpenChamber checks the installed manifest version against the repository when you ask it to check for extension updates. This repository keeps `dist/` committed so the Git install works without a local build.
 
-## What it measures, and where
+## Collection and platform support
 
-Everything is measured on the machine where the OpenChamber **server** runs. If you are connected to a remote server, you see that server's load.
+All measurements stay on the machine running the OpenChamber service. An OpenChamber client connected to a remote service sees that remote machine. Missing sensors are reported as unavailable; an unknown reading is never substituted with zero.
 
-| | macOS | Linux | Windows |
-|---|---|---|---|
-| CPU | `os.cpus()` | `os.cpus()`, cgroup limit in a container | `os.cpus()` |
-| Load average | `os.loadavg()` | `os.loadavg()` | – (Windows has none) |
-| Memory | `vm_stat` (like Activity Monitor), `sysctl vm.swapusage` | `/proc/meminfo`, cgroup limit in a container | `os.totalmem()` / `os.freemem()` |
-| GPU | `ioreg` (Apple Silicon and Intel) | `nvidia-smi`, AMD via `/sys/class/drm` | `nvidia-smi`, otherwise WMI GPU performance counters |
-| Disks | `df`, APFS volumes folded into their container | `df`, real filesystems only | `Win32_LogicalDisk` |
+| Module | Windows | Linux | macOS |
+| --- | --- | --- | --- |
+| CPU | Usage, per-core usage, core count, load unavailable | Usage, per-core usage, load average, current frequency when sysfs exposes it | Usage, per-core usage, load average |
+| Memory | Used/total and pagefile when readable | Used/available, cache, commit, swap, PSI pressure when exposed; cgroup limits in containers | Activity-Monitor-style used memory and swap |
+| GPU | NVIDIA `nvidia-smi` metrics when supported; otherwise WMI 3D usage and WDDM memory | NVIDIA `nvidia-smi`; AMD sysfs utilization/VRAM where exposed | `ioreg` accelerator utilization and shared-memory usage where exposed |
+| Storage capacity | Fixed and removable volumes | Local mounted filesystems with duplicate/bind mounts filtered | Volumes with shared APFS capacity folded together |
+| Storage activity | Performance counters when available | Kernel disk counters | Unavailable |
+| Network | Active adapters, default route, link speed and byte rates | Active interfaces, default route, link speed and byte rates | Interface counters and default route when available |
+| Processes | Top CPU/memory via Windows performance counters | Bounded `/proc` scan | Bounded `ps` snapshot |
+| Battery | Battery systems only | power-supply sysfs | `pmset` |
+| Temperature | NVIDIA sensors when available | hwmon and NVIDIA sensors when available | Unavailable through this extension |
+| Hardware | Computer, OS, CPU, memory and display-adapter details where WMI exposes them | DMI/sysfs and OS details where readable | `sysctl` and OS details where exposed |
 
-A value the system does not provide is shown as *not available*, never as 0.
+Optional sensor fields such as GPU power, fan speed, temperature, memory pressure, disk response time, battery health, or current CPU frequency are only shown when the OS or driver provides them. Serial numbers and product keys are not collected.
 
-## Warnings
+## Sampling and resource use
 
-| | Warning | Critical |
-|---|---|---|
-| Disk | 90 % full | 95 % full |
-| Memory | 90 % used | 95 % used |
-| CPU, GPU | 90 % or more for a full minute | – |
+- CPU, memory, and GPU sampling: every 2 seconds while a frame is actively requesting stats.
+- Network and disk activity: every 5 seconds.
+- Processes and temperatures: every 10 seconds.
+- Battery: every 30 seconds.
+- Disk capacity: every 30 seconds.
+- Static computer information: every 5 minutes.
+- The sampler stops after 30 seconds without a visible consumer, terminates its long-lived GPU helper, and drops history.
 
-The badge on the rail icon shows how many warnings are active. OpenChamber clears it when you open the panel; it comes back when the set of warnings changes.
+The settings page controls display refresh, history window, optional data modules, process-list size, alert thresholds, and pause/resume. Disabling an optional module reports `disabled` explicitly. CPU, memory, GPU, and capacity remain the core readings.
 
-## Why it needs a local service
+## Health and privacy
 
-The panel runs in a sandboxed iframe that cannot read anything from the system. A small Node service in this package does the measuring. OpenChamber starts it with its own runtime, on `127.0.0.1` only, and passes the panel's requests through.
+Defaults are 85% warning and 95% critical for memory and disk. CPU/GPU alerts require the configured sustained duration (60 seconds by default); swap alerts default to 50%. Change thresholds in the extension Settings tab.
 
-The service only reads. It runs these commands, depending on the system: `df`, `ioreg`, `vm_stat`, `sysctl`, `nvidia-smi`, `powershell`. It measures only while a panel or the status section asks (every 2 seconds) and goes idle 30 seconds after the last request.
-
-## Known limits
-
-- The badge updates while the Work Status panel is visible, because that section does the asking. With it closed, the badge keeps its last state.
-- On Windows without an NVIDIA card, GPU memory shows as *in use* only. Windows does not report the total reliably.
-- Container detection covers Linux containers (Docker, Podman, Kubernetes). Docker Desktop on macOS and Windows runs a Linux VM, so the extension inside it sees that VM.
-- On Apple Silicon, GPU memory is shared with the CPU, so there is no separate total.
+The service binds to `127.0.0.1`, checks OpenChamber’s bearer token on every endpoint, and has no external listener, analytics, telemetry, or cloud dependency. System actions are explicit; monitoring and recommendations do not delete files, stop processes, edit the registry, or disable services. Process names/PIDs stay in the UI and are excluded from copied diagnostics.
 
 ## Development
 
-Needs [Bun](https://bun.sh) and Node 22+.
+Requires Bun and Node 22+.
 
 ```bash
 bun install
-bun run check            # typecheck, tests, build
-node scripts/smoke.mjs   # start the built service and check a real /stats answer
-bun run preview          # both frames in a normal browser, with a light/dark and language switch
+bun run typecheck
+bun test
+bun run build
+node scripts/smoke.mjs
+bun run preview
 ```
 
-Install your working copy with **Settings → Extensions → add** and the folder path. After `bun run build`, reload the OpenChamber window. A changed service picks up the new code after OpenChamber restarts it.
+`bun run check` combines typecheck, tests, and build. `bun run preview` starts a local service and a lightweight host shim with theme/language controls, extension storage, POST forwarding, and a simulated full-page view. It is a development preview, not an OpenChamber host integration test.
 
-`dist/` is committed so that installing from the git URL works without a build step. See [AGENTS.md](AGENTS.md) for the layout and rules.
+The package is vanilla TypeScript and OpenChamber SDK UI: no React or charting dependency. Pure parsers live beside platform collectors; tests use sanitized Linux, Windows, and macOS fixtures. See [docs/design.md](docs/design.md) for the V2 architecture and limits.
 
 ## License
 

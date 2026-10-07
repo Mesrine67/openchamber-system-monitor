@@ -28,6 +28,8 @@ export const describeUnavailable = (source: Unavailable, t: Messages): string =>
   if (source.reason === 'tool-missing') return format(t.reasonToolMissing, { tool: source.tool ?? '?' });
   if (source.reason === 'no-device') return t.reasonNoDevice;
   if (source.reason === 'unsupported') return t.reasonUnsupported;
+  if (source.reason === 'disabled') return t.notAvailable;
+  if (source.reason === 'pending') return t.measuring;
   return t.reasonFailed;
 };
 

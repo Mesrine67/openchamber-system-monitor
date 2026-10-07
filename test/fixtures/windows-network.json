@@ -1,0 +1,1 @@
+[{"Name":"Ethernet","ReceivedBytes":12345,"SentBytes":67890,"Default":true,"LinkSpeed":"1 Gbps"},{"Name":"Wi-Fi","ReceivedBytes":100,"SentBytes":200,"Default":false,"LinkSpeed":"866.7 Mbps"}]

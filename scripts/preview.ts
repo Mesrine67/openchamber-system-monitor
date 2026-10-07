@@ -26,21 +26,25 @@ const page = `<!doctype html>
 <html><head><meta charset="utf-8"><title>System Monitor preview</title>
 <style>
   body{margin:0;padding:20px;font:13px -apple-system,system-ui,sans-serif;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
-  body.dark{background:#151313;color:#c9c5ba} body.light{background:#f4f2ee;color:#222}
+  body[data-theme=dark]{background:#151313;color:#c9c5ba} body[data-theme=light]{background:#f4f2ee;color:#222}
   .box{border:1px solid #8884;border-radius:12px;overflow:hidden}
   .box h3{margin:0;padding:8px 12px;font-size:12px;border-bottom:1px solid #8884}
   iframe{display:block;border:0;background:transparent}
   #panel{width:360px;height:720px} #status{width:280px;height:96px;margin:8px 12px}
-  .controls{width:100%;display:flex;gap:8px} button,select{font:inherit}
+  .controls{width:100%;display:flex;gap:8px;align-items:center} button,select{font:inherit}
+  .dashboard{padding:0;overflow:hidden}.dashboard .panel-box{position:fixed;inset:52px 12px 12px;z-index:10;background:var(--oc-bg,#151313);border-radius:10px}.dashboard .panel-box h3{display:none}.dashboard #panel{width:100%;height:100%}.dashboard #status-box{display:none}
+  @media(max-width:600px){.dashboard .panel-box{inset:44px 0 0;border-radius:0}}
 </style></head>
-<body class="dark">
+<body data-theme="dark">
   <div class="controls">
     <button id="theme">Toggle theme</button>
     <select id="locale">${['en', 'de', 'es', 'fr', 'ja', 'ko', 'nl', 'pl', 'pt-BR', 'tr', 'uk', 'zh-CN', 'zh-TW'].map((l) => `<option>${l}</option>`).join('')}</select>
+    <button id="open-page">Open full-page preview</button>
+    <button id="back" hidden>Back to rail preview</button>
     <span id="badge"></span>
   </div>
-  <div class="box"><h3>System Monitor</h3><iframe id="panel" sandbox="allow-scripts" src="/dist/panel/index.html"></iframe></div>
-  <div class="box"><h3>System</h3><iframe id="status" sandbox="allow-scripts" src="/dist/status/index.html"></iframe></div>
+  <div class="box panel-box"><h3>System Monitor</h3><iframe id="panel" sandbox="allow-scripts" src="/dist/panel/index.html"></iframe></div>
+  <div class="box" id="status-box"><h3>System</h3><iframe id="status" sandbox="allow-scripts" src="/dist/status/index.html"></iframe></div>
 <script>
 const themes = {
   dark: { background:'#151313', elevated:'#1d1b1b', foreground:'#c9c5ba', muted:'#8a857c', subtle:'#2a2727', border:'#2f2c2c',
@@ -56,14 +60,19 @@ const themes = {
 };
 let mode = 'dark';
 let locale = 'en';
+let panelSurface = 'panel';
+const previewStorage = new Map();
 const frames = [['panel', document.getElementById('panel')], ['status', document.getElementById('status')]];
 const envelope = { channel: 'openchamber.sdk', v: 1 };
 const ready = (surface) => ({ ...envelope, type: 'ready', payload: {
   theme: { mode, tokens: themes[mode] }, locale, directory: null, session: null, surface,
   connection: { connected: false, account: null }, settings: {}, item: null } });
-const pushReady = () => { for (const [surface, frame] of frames) frame.contentWindow.postMessage(ready(surface), '*'); };
-document.getElementById('theme').onclick = () => { mode = mode === 'dark' ? 'light' : 'dark'; document.body.className = mode; pushReady(); };
+const pushReady = () => { for (const [surface, frame] of frames) frame.contentWindow.postMessage(ready(surface === 'panel' ? panelSurface : surface), '*'); };
+document.getElementById('theme').onclick = () => { mode = mode === 'dark' ? 'light' : 'dark'; document.body.dataset.theme = mode; pushReady(); };
 document.getElementById('locale').onchange = (event) => { locale = event.target.value; pushReady(); };
+const openPagePreview = () => { panelSurface = 'page'; document.body.classList.add('dashboard'); document.getElementById('back').hidden = false; pushReady(); };
+document.getElementById('open-page').onclick = openPagePreview;
+document.getElementById('back').onclick = () => { panelSurface = 'panel'; document.body.classList.remove('dashboard'); document.getElementById('back').hidden = true; pushReady(); };
 addEventListener('message', async (event) => {
   const entry = frames.find(([, frame]) => frame.contentWindow === event.source);
   const message = event.data;
@@ -73,8 +82,34 @@ addEventListener('message', async (event) => {
   if (message.type === 'hello') { frame.contentWindow.postMessage(ready(surface), '*'); return; }
   if (!message.id) return;
   if (message.type === 'service-request') {
-    const response = await fetch('/service' + message.payload.path);
+    const response = await fetch('/service' + message.payload.path, {
+      method: message.payload.method ?? 'GET',
+      headers: message.payload.body === undefined ? {} : { 'content-type': 'application/json' },
+      body: message.payload.body,
+    });
     reply({ ok: true, payload: { status: response.status, body: await response.text() } });
+    return;
+  }
+  if (message.type === 'storage') {
+    const request = message.payload;
+    if (request.op === 'get') {
+      const found = previewStorage.has(request.key);
+      reply({ ok: true, payload: { storage: true, op: 'get', found, ...(found ? { value: previewStorage.get(request.key) } : {}) } });
+    } else if (request.op === 'set') {
+      previewStorage.set(request.key, request.value); reply({ ok: true, payload: { storage: true, op: 'set' } });
+    } else if (request.op === 'delete') {
+      previewStorage.delete(request.key); reply({ ok: true, payload: { storage: true, op: 'delete' } });
+    } else if (request.op === 'keys') {
+      reply({ ok: true, payload: { storage: true, op: 'keys', keys: [...previewStorage.keys()] } });
+    }
+    return;
+  }
+  if (message.type === 'open-surface' && surface === 'panel' && message.payload.surfaceId === 'system-monitor') {
+    openPagePreview(); reply({ ok: true }); return;
+  }
+  if (message.type === 'clipboard-write') {
+    try { await navigator.clipboard.writeText(message.payload.text); reply({ ok: true }); }
+    catch { reply({ ok: false, error: 'Clipboard permission is unavailable in preview.' }); }
     return;
   }
   if (message.type === 'resize' && surface === 'status') frame.style.height = Math.min(320, Math.max(24, message.payload.height)) + 'px';
@@ -90,8 +125,11 @@ Bun.serve({
     const { pathname } = new URL(request.url);
     if (pathname === '/') return new Response(page, { headers: { 'content-type': 'text/html' } });
     if (pathname.startsWith('/service/')) {
+      const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
       return fetch(`http://127.0.0.1:${servicePort}${pathname.slice('/service'.length)}`, {
-        headers: { authorization: `Bearer ${token}` },
+        method: request.method,
+        headers: { authorization: `Bearer ${token}`, ...(request.headers.get('content-type') ? { 'content-type': request.headers.get('content-type')! } : {}) },
+        body,
       });
     }
     if (pathname.startsWith('/dist/')) {

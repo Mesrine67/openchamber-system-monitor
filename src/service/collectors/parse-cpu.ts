@@ -4,6 +4,12 @@ export type CoreTimes = { user: number; nice: number; sys: number; idle: number;
 
 const clampPercent = (value: number): number => Math.min(100, Math.max(0, value));
 
+/** Linux sysfs scaling_cur_freq readings are kHz; average only positive finite cores. */
+export const parseCpuFrequencyMHz = (readings: string[]): number | null => {
+  const values = readings.map((value) => Number(value.trim())).filter((value) => Number.isFinite(value) && value > 0);
+  return values.length === 0 ? null : values.reduce((sum, value) => sum + value, 0) / values.length / 1000;
+};
+
 /** Busy share per core and overall between two `os.cpus()` readings. */
 export const cpuUsage = (previous: CoreTimes[], next: CoreTimes[]): { total: number; perCore: number[] } | null => {
   if (previous.length === 0 || previous.length !== next.length) return null;

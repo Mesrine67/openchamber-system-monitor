@@ -1,0 +1,3 @@
+Name  Mtu   Network       Address            Ipkts Ierrs    Ibytes    Opkts Oerrs     Obytes  Coll
+en0   1500  <Link#4>      a1:b2:c3:d4:e5:f6  1234     0  76543210     987     0   12345678     0
+lo0   16384 <Link#1>      lo0                1000     0      9000    1000     0       9000     0

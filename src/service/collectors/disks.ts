@@ -1,5 +1,5 @@
 import { unavailable, type Disk, type Platform, type Unavailable } from '../../shared/stats.ts';
-import { run } from './exec.ts';
+import { readText, run } from './exec.ts';
 import { darwinDisks, linuxDisks, parseDf, parseWindowsDisks } from './parse-disks.ts';
 import { runPowerShell } from './windows.ts';
 
@@ -9,6 +9,19 @@ const WINDOWS_DISKS =
 const WINDOWS_TIMEOUT_MS = 10_000;
 
 const DF = ['/bin/df', '/usr/bin/df', 'df'];
+
+const deviceType = async (disk: Disk): Promise<Disk> => {
+  if (!disk.device?.startsWith('/dev/')) return disk;
+  const block = disk.device.slice('/dev/'.length);
+  if (/^(mapper|disk|loop)/.test(block)) return disk;
+  const queueBlock = block.replace(/p\d+$/, '');
+  const rotationalBlock = /^(nvme\d+n\d+|mmcblk\d+)$/.test(queueBlock) ? queueBlock : queueBlock.replace(/\d+$/, '');
+  if (!/^[a-zA-Z0-9_-]+$/.test(rotationalBlock)) return disk;
+  const rotational = (await readText(`/sys/class/block/${rotationalBlock}/queue/rotational`))?.trim();
+  if (rotational === '1') return { ...disk, deviceType: 'hdd' };
+  if (rotational === '0') return { ...disk, deviceType: /^nvme/.test(rotationalBlock) ? 'nvme' : 'ssd' };
+  return disk;
+};
 
 const readDf = async (): Promise<{ ok: true; stdout: string } | Unavailable> => {
   // `-l` (local only) is missing from BusyBox; fall back to every filesystem.
@@ -30,7 +43,8 @@ export const readDisks = async (platform: Platform, container: boolean): Promise
     if (!('ok' in df)) return df;
     const rows = parseDf(df.stdout);
     if (rows.length === 0) return unavailable('failed');
-    return platform === 'darwin' ? darwinDisks(rows) : linuxDisks(rows, container);
+    if (platform === 'darwin') return darwinDisks(rows);
+    return Promise.all(linuxDisks(rows, container).map(deviceType));
   }
   return unavailable('unsupported');
 };

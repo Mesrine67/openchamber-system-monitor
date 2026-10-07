@@ -3,23 +3,80 @@ import http from "node:http";
 
 // src/service/collectors/cpu-mem.ts
 import os from "node:os";
+import { readdir } from "node:fs/promises";
 
 // src/shared/stats.ts
+var DEFAULT_MONITOR_SETTINGS = {
+  paused: false,
+  refreshSeconds: 2,
+  historyMinutes: 2,
+  processLimit: 10,
+  modules: { network: true, processes: true, battery: true, sensors: true },
+  thresholds: {
+    memoryWarning: 85,
+    memoryCritical: 95,
+    diskWarning: 85,
+    diskCritical: 95,
+    cpuWarning: 85,
+    cpuCritical: 95,
+    gpuWarning: 85,
+    gpuCritical: 95,
+    swapWarning: 50,
+    sustainedSeconds: 60
+  }
+};
+var allowed = (value, values, fallback) => typeof value === "number" && values.includes(value) ? value : fallback;
+var threshold = (value, fallback) => typeof value === "number" && Number.isFinite(value) ? Math.min(99, Math.max(50, Math.round(value))) : fallback;
+var normalizeMonitorSettings = (value) => {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return structuredClone(DEFAULT_MONITOR_SETTINGS);
+  const modules = Reflect.get(value, "modules");
+  const thresholds = Reflect.get(value, "thresholds");
+  const read = (source, key) => typeof source === "object" && source !== null ? Reflect.get(source, key) : undefined;
+  const normalizedThresholds = {
+    memoryWarning: threshold(read(thresholds, "memoryWarning"), 85),
+    memoryCritical: threshold(read(thresholds, "memoryCritical"), 95),
+    diskWarning: threshold(read(thresholds, "diskWarning"), 85),
+    diskCritical: threshold(read(thresholds, "diskCritical"), 95),
+    cpuWarning: threshold(read(thresholds, "cpuWarning"), 85),
+    cpuCritical: threshold(read(thresholds, "cpuCritical"), 95),
+    gpuWarning: threshold(read(thresholds, "gpuWarning"), 85),
+    gpuCritical: threshold(read(thresholds, "gpuCritical"), 95),
+    swapWarning: threshold(read(thresholds, "swapWarning"), 50),
+    sustainedSeconds: allowed(read(thresholds, "sustainedSeconds"), [30, 60, 120], 60)
+  };
+  for (const [warning, critical] of [
+    ["memoryWarning", "memoryCritical"],
+    ["diskWarning", "diskCritical"],
+    ["cpuWarning", "cpuCritical"],
+    ["gpuWarning", "gpuCritical"]
+  ]) {
+    if (normalizedThresholds[warning] >= normalizedThresholds[critical]) {
+      normalizedThresholds[warning] = Math.max(50, normalizedThresholds[critical] - 5);
+    }
+  }
+  return {
+    paused: read(value, "paused") === true,
+    refreshSeconds: allowed(read(value, "refreshSeconds"), [2, 5, 10], 2),
+    historyMinutes: allowed(read(value, "historyMinutes"), [2, 5, 15, 30], 2),
+    processLimit: allowed(read(value, "processLimit"), [5, 10, 20], 10),
+    modules: {
+      network: read(modules, "network") !== false,
+      processes: read(modules, "processes") !== false,
+      battery: read(modules, "battery") !== false,
+      sensors: read(modules, "sensors") !== false
+    },
+    thresholds: normalizedThresholds
+  };
+};
 var SAMPLE_INTERVAL_MS = 2000;
 var HISTORY_LENGTH = 60;
+var WARNING_HISTORY_LENGTH = 60;
 var IDLE_STOP_MS = 30000;
 var DISK_INTERVAL_MS = 30000;
 var RETRY_UNAVAILABLE_MS = 60000;
 var FAILURES_BEFORE_UNAVAILABLE = 3;
 var WARN_PERCENT = 90;
-var CRITICAL_PERCENT = 95;
-var levelForPercent = (percent) => {
-  if (percent >= CRITICAL_PERCENT)
-    return "critical";
-  if (percent >= WARN_PERCENT)
-    return "warn";
-  return null;
-};
 var unavailable = (reason, tool = null) => ({
   status: "unavailable",
   reason,
@@ -35,7 +92,7 @@ var busiestGpu = (gpus) => {
   }
   return busiest;
 };
-var diskPercent = (disk) => disk.total > 0 ? disk.used / disk.total * 100 : 0;
+var diskPercent = (disk) => disk.total > 0 ? disk.used / disk.total * 100 : null;
 
 // src/service/collectors/exec.ts
 import { execFile } from "node:child_process";
@@ -132,8 +189,18 @@ var parseMeminfo = (text) => {
     total: total * KIB,
     available: available * KIB,
     swapTotal: (read("SwapTotal") ?? 0) * KIB,
-    swapFree: (read("SwapFree") ?? 0) * KIB
+    swapFree: (read("SwapFree") ?? 0) * KIB,
+    cached: read("Cached") === null ? null : (read("Cached") ?? 0) * KIB,
+    committed: read("Committed_AS") === null ? null : (read("Committed_AS") ?? 0) * KIB,
+    commitLimit: read("CommitLimit") === null ? null : (read("CommitLimit") ?? 0) * KIB
   };
+};
+var parseMemoryPressure = (text) => {
+  const match = /^some\s+.*?avg10=(\d+(?:\.\d+)?)/m.exec(text);
+  const percent = match?.[1] ? Number(match[1]) : NaN;
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100)
+    return null;
+  return percent >= 10 ? "high" : percent >= 1 ? "medium" : "low";
 };
 var parseCgroupMemory = (input) => {
   const limitText = input.limit?.trim();
@@ -145,7 +212,7 @@ var parseCgroupMemory = (input) => {
   if (!Number.isFinite(limit) || !Number.isFinite(usage) || limit <= 0 || limit >= 2 ** 60)
     return null;
   const inactive = input.stat ? field(input.stat, /^(?:total_)?inactive_file (\d+)$/m) ?? 0 : 0;
-  return { used: Math.max(0, usage - inactive), total: limit };
+  return { used: Math.min(limit, Math.max(0, usage - inactive)), total: limit };
 };
 
 // src/service/collectors/windows.ts
@@ -254,6 +321,10 @@ var createGpuLoop = () => {
 
 // src/service/collectors/parse-cpu.ts
 var clampPercent = (value) => Math.min(100, Math.max(0, value));
+var parseCpuFrequencyMHz = (readings) => {
+  const values = readings.map((value) => Number(value.trim())).filter((value) => Number.isFinite(value) && value > 0);
+  return values.length === 0 ? null : values.reduce((sum, value) => sum + value, 0) / values.length / 1000;
+};
 var cpuUsage = (previous, next) => {
   if (previous.length === 0 || previous.length !== next.length)
     return null;
@@ -304,7 +375,17 @@ var limitedCpuUsage = (previousUsec, nextUsec, elapsedMs, limitCores) => {
 var CGROUP = "/sys/fs/cgroup";
 var SWAP_INTERVAL_MS = 1e4;
 var WINDOWS_PAGEFILE_QUERY = "Get-CimInstance Win32_PageFileUsage | Select-Object AllocatedBaseSize, CurrentUsage | ConvertTo-Json -Compress";
-var coreTimes = () => os.cpus().map((cpu) => cpu.times);
+var readLinuxFrequencyMHz = async () => {
+  let entries;
+  try {
+    entries = await readdir("/sys/devices/system/cpu");
+  } catch {
+    return null;
+  }
+  const cores = entries.filter((name) => /^cpu\d+$/.test(name)).slice(0, 256);
+  const values = await Promise.all(cores.map(async (core) => await readText(`/sys/devices/system/cpu/${core}/cpufreq/scaling_cur_freq`) ?? await readText(`/sys/devices/system/cpu/${core}/cpufreq/cpuinfo_cur_freq`)));
+  return parseCpuFrequencyMHz(values.filter((value) => value !== null));
+};
 var readCgroupCpu = async () => {
   const v2Limit = await readText(`${CGROUP}/cpu.max`);
   if (v2Limit !== null) {
@@ -364,18 +445,20 @@ var createCpuMemCollector = (platform, container, now) => {
   };
   return {
     prime: async () => {
-      previousTimes = coreTimes();
+      previousTimes = os.cpus().map((cpu) => cpu.times);
       await readCgroupBaseline();
     },
     cpu: async () => {
-      const times = coreTimes();
+      const cpuData = os.cpus();
+      const times = cpuData.map((cpu) => cpu.times);
       const host = cpuUsage(previousTimes, times);
       previousTimes = times;
       const load = platform === "win32" ? null : os.loadavg();
       const base = {
         cores: times.length,
-        model: os.cpus()[0]?.model.trim() || null,
-        load: load ? [load[0] ?? 0, load[1] ?? 0, load[2] ?? 0] : null
+        model: cpuData[0]?.model.trim() || null,
+        load: load ? [load[0] ?? 0, load[1] ?? 0, load[2] ?? 0] : null,
+        frequencyMHz: platform === "linux" ? await readLinuxFrequencyMHz() : null
       };
       if (container) {
         const { limitCores, usageUsec } = await readCgroupCpu();
@@ -402,6 +485,10 @@ var createCpuMemCollector = (platform, container, now) => {
             used: limited.used,
             total: limited.total,
             available: Math.max(0, limited.total - limited.used),
+            cached: null,
+            committed: null,
+            commitLimit: null,
+            pressure: null,
             swapUsed: null,
             swapTotal: null
           };
@@ -415,6 +502,10 @@ var createCpuMemCollector = (platform, container, now) => {
           used: info.total - info.available,
           total: info.total,
           available: info.available,
+          cached: info.cached,
+          committed: info.committed,
+          commitLimit: info.commitLimit,
+          pressure: parseMemoryPressure(await readText(container ? `${CGROUP}/memory.pressure` : "/proc/pressure/memory") ?? ""),
           swapUsed: info.swapTotal > 0 ? info.swapTotal - info.swapFree : null,
           swapTotal: info.swapTotal > 0 ? info.swapTotal : null
         };
@@ -423,14 +514,18 @@ var createCpuMemCollector = (platform, container, now) => {
         const [vm, swapUsage] = await Promise.all([run(["/usr/bin/vm_stat", "vm_stat"], []), readSwap()]);
         if (!vm.ok)
           return unavailable(vm.missing ? "tool-missing" : "failed", "vm_stat");
-        const used = parseVmStat(vm.stdout);
-        if (used === null)
+        const used2 = parseVmStat(vm.stdout);
+        if (used2 === null)
           return unavailable("failed");
         return {
           status: "ok",
-          used,
+          used: used2,
           total: os.totalmem(),
-          available: Math.max(0, os.totalmem() - used),
+          available: Math.max(0, os.totalmem() - used2),
+          cached: null,
+          committed: null,
+          commitLimit: null,
+          pressure: null,
           swapUsed: swapUsage && swapUsage.total > 0 ? swapUsage.used : null,
           swapTotal: swapUsage && swapUsage.total > 0 ? swapUsage.total : null
         };
@@ -443,6 +538,10 @@ var createCpuMemCollector = (platform, container, now) => {
         used,
         total,
         available: total - used,
+        cached: null,
+        committed: null,
+        commitLimit: null,
+        pressure: null,
         swapUsed: pageFile?.used ?? null,
         swapTotal: pageFile?.total ?? null
       };
@@ -450,12 +549,162 @@ var createCpuMemCollector = (platform, container, now) => {
   };
 };
 
+// src/service/collectors/battery.ts
+import { readdir as readdir2 } from "node:fs/promises";
+
+// src/service/collectors/parse-battery.ts
+var number = (value) => {
+  const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
+var capacityHealth = (full, design) => {
+  const fullValue = number(full);
+  const designValue = number(design);
+  return fullValue !== null && designValue !== null && designValue > 0 ? Math.min(100, fullValue / designValue * 100) : null;
+};
+var parseLinuxBattery = (input) => {
+  const percent = number(input.capacity);
+  if (percent === null || percent > 100)
+    return null;
+  const stateText = input.status?.trim().toLowerCase();
+  const state = stateText === "charging" ? "charging" : stateText === "discharging" ? "discharging" : stateText === "full" ? "full" : "unknown";
+  const energyNow = number(input.energyNow);
+  const energyFull = number(input.energyFull);
+  const healthPercent = capacityHealth(input.energyFull, input.energyFullDesign);
+  const powerNow = number(input.powerNow);
+  const remainingEnergy = state === "charging" && energyFull !== null && energyNow !== null ? Math.max(0, energyFull - energyNow) : energyNow;
+  const remainingSeconds = powerNow !== null && powerNow > 0 && remainingEnergy !== null ? Math.round(remainingEnergy / powerNow * 3600) : null;
+  const ac = input.acOnline?.trim();
+  return {
+    status: "ok",
+    percent,
+    state,
+    acConnected: ac === "1" ? true : ac === "0" ? false : null,
+    remainingSeconds,
+    healthPercent
+  };
+};
+var parseWindowsBattery = (text) => {
+  let value;
+  try {
+    value = JSON.parse(text.trim() || "null");
+  } catch {
+    return null;
+  }
+  const row = Array.isArray(value) ? value[0] : value;
+  if (typeof row !== "object" || row === null)
+    return null;
+  const get = (key) => Reflect.get(row, key);
+  const percent = number(get("EstimatedChargeRemaining"));
+  const batteryStatus = number(get("BatteryStatus"));
+  if (percent === null || percent > 100)
+    return null;
+  const state = batteryStatus === 3 ? "full" : batteryStatus !== null && [6, 7, 8, 9, 10, 11, 12].includes(batteryStatus) ? "charging" : batteryStatus === 1 || batteryStatus === 4 || batteryStatus === 5 ? "discharging" : "unknown";
+  const runtimeMinutes = number(get("EstimatedRunTime"));
+  const remainingSeconds = runtimeMinutes !== null && runtimeMinutes > 0 && runtimeMinutes < 71582788 ? runtimeMinutes * 60 : null;
+  return {
+    status: "ok",
+    percent,
+    state,
+    acConnected: batteryStatus === null ? null : [2, 3, 6, 7, 8, 9, 10, 11, 12, 14].includes(batteryStatus),
+    remainingSeconds,
+    healthPercent: capacityHealth(get("FullChargeCapacity"), get("DesignCapacity"))
+  };
+};
+var parseDarwinBattery = (text) => {
+  const header = /Now drawing from ['"]([^'"]+)['"]/.exec(text);
+  const line = /([0-9]{1,3})%;\s*([^\n]*)/i.exec(text);
+  if (!line?.[1])
+    return null;
+  const percent = Number(line[1]);
+  if (!Number.isFinite(percent) || percent > 100)
+    return null;
+  const stateText = line[2]?.toLowerCase() ?? "";
+  const state = /\bcharging\b|\bfinishing charge\b/i.test(stateText) ? "charging" : /\bdischarging\b/i.test(stateText) ? "discharging" : /\bcharged\b/i.test(stateText) ? "full" : "unknown";
+  const remaining = /\((\d+):(\d+)\s+remaining\)/i.exec(stateText);
+  const hours = remaining?.[1] === undefined ? null : Number(remaining[1]);
+  const minutes = remaining?.[2] === undefined ? null : Number(remaining[2]);
+  return {
+    status: "ok",
+    percent,
+    state,
+    acConnected: header?.[1] === "AC Power" ? true : header?.[1] === "Battery Power" ? false : null,
+    remainingSeconds: hours !== null && minutes !== null ? (hours * 60 + minutes) * 60 : null,
+    healthPercent: null
+  };
+};
+
+// src/service/collectors/battery.ts
+var WINDOWS_BATTERY = `
+$ErrorActionPreference = 'Stop'
+try {
+  $batteries = @(Get-CimInstance Win32_Battery | Select-Object EstimatedChargeRemaining, BatteryStatus, EstimatedRunTime, FullChargeCapacity, DesignCapacity)
+  if ($batteries.Count -eq 0) { [Console]::Out.WriteLine('[]') }
+  else { ConvertTo-Json -InputObject $batteries -Compress }
+} catch {
+  [Console]::Error.WriteLine($_.Exception.Message)
+  exit 1
+}
+`;
+var linuxBattery = async () => {
+  let devices;
+  try {
+    devices = await readdir2("/sys/class/power_supply");
+  } catch {
+    return unavailable("failed");
+  }
+  let acOnline = null;
+  const candidates = [];
+  for (const device of devices.slice(0, 64)) {
+    const path2 = `/sys/class/power_supply/${device}`;
+    const [type, online] = await Promise.all([readText(`${path2}/type`), readText(`${path2}/online`)]);
+    if (type?.trim() === "Battery")
+      candidates.push(path2);
+    if (online?.trim() === "1" || online?.trim() === "0")
+      acOnline = online.trim();
+  }
+  const path = candidates[0];
+  if (!path)
+    return unavailable("no-device");
+  const [capacity, status, energyNow, energyFull, energyFullDesign, powerNow] = await Promise.all([
+    readText(`${path}/capacity`),
+    readText(`${path}/status`),
+    readText(`${path}/energy_now`),
+    readText(`${path}/energy_full`),
+    readText(`${path}/energy_full_design`),
+    readText(`${path}/power_now`)
+  ]);
+  const result = parseLinuxBattery({ capacity, status, energyNow, energyFull, energyFullDesign, powerNow, acOnline });
+  return result ?? unavailable("failed");
+};
+var readBattery = async (platform) => {
+  if (platform === "linux")
+    return linuxBattery();
+  if (platform === "darwin") {
+    const result = await run(["/usr/bin/pmset", "pmset"], ["-g", "batt"]);
+    if (!result.ok)
+      return unavailable(result.missing ? "tool-missing" : "failed", "pmset");
+    return parseDarwinBattery(result.stdout) ?? unavailable("no-device");
+  }
+  if (platform === "win32") {
+    const result = await runPowerShell(WINDOWS_BATTERY, 8000);
+    if (!result.ok)
+      return unavailable(result.missing ? "tool-missing" : "failed", "powershell");
+    const value = parseWindowsBattery(result.stdout);
+    const output = result.stdout.trim();
+    return value ?? (output === "[]" ? unavailable("no-device") : unavailable("failed"));
+  }
+  return unavailable("unsupported");
+};
+
 // src/service/collectors/computer.ts
+import os2 from "node:os";
 var WINDOWS_COMPUTER_INFO = `
 $ErrorActionPreference = 'SilentlyContinue'
 $cs = Get-CimInstance Win32_ComputerSystem
 $os = Get-CimInstance Win32_OperatingSystem
 $bios = Get-CimInstance Win32_BIOS
+$board = Get-CimInstance Win32_BaseBoard | Select-Object -First 1 Manufacturer, Product
 $cpu = @(Get-CimInstance Win32_Processor | Select-Object NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed)
 $ram = @(Get-CimInstance Win32_PhysicalMemory | Select-Object Speed)
 $gpu = @(Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion)
@@ -464,6 +713,7 @@ $displayVersion = (Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\Cur
   manufacturer = $cs.Manufacturer
   model = $cs.Model
   firmware = $bios.SMBIOSBIOSVersion
+  motherboard = if ($board.Manufacturer -or $board.Product) { "$($board.Manufacturer) $($board.Product)".Trim() } else { $null }
   osName = $os.Caption
   osVersion = $os.Version
   osDisplayVersion = $displayVersion
@@ -504,16 +754,94 @@ var parseComputerInfo = (text) => {
     logicalProcessors: numberOrNull(read("logicalProcessors")),
     cpuMaxMHz: numberOrNull(read("cpuMaxMHz")),
     memoryModules: numberOrNull(read("memoryModules")),
-    memorySpeedMHz: numberOrNull(read("memorySpeedMHz"))
+    memorySpeedMHz: numberOrNull(read("memorySpeedMHz")),
+    motherboard: stringOrNull(read("motherboard"))
+  };
+};
+var parseReleaseFile = (text) => Object.fromEntries(text.split(/\r?\n/).flatMap((line) => {
+  const match = /^([A-Z0-9_]+)=(.*)$/.exec(line);
+  if (!match?.[1] || match[2] === undefined)
+    return [];
+  return [[match[1], match[2].replace(/^"|"$/g, "")]];
+}));
+var readLinuxInfo = async () => {
+  const [dmi, release, cpuInfo, maxFrequency] = await Promise.all([
+    Promise.all(["sys_vendor", "product_name", "bios_version", "board_vendor", "board_name"].map((name) => readText(`/sys/class/dmi/id/${name}`))),
+    readText("/etc/os-release"),
+    readText("/proc/cpuinfo"),
+    readText("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq")
+  ]);
+  const [manufacturer, model, firmware, boardVendor, boardName] = dmi;
+  const coreIds = new Set;
+  for (const block of (cpuInfo ?? "").split(/\n\s*\n/)) {
+    const physical = /^physical id\s*:\s*(\S+)/m.exec(block)?.[1];
+    const core = /^core id\s*:\s*(\S+)/m.exec(block)?.[1];
+    if (physical && core)
+      coreIds.add(`${physical}:${core}`);
+  }
+  const frequencyKHz = Number(maxFrequency?.trim());
+  const osRelease = parseReleaseFile(release ?? "");
+  const displayAdapters = [];
+  return {
+    manufacturer: stringOrNull(manufacturer),
+    model: stringOrNull(model),
+    firmware: stringOrNull(firmware),
+    osName: osRelease.NAME || "Linux",
+    osVersion: os2.release(),
+    osDisplayVersion: osRelease.PRETTY_NAME || null,
+    osBuild: os2.release() || null,
+    displayAdapters,
+    physicalCores: coreIds.size || null,
+    logicalProcessors: os2.cpus().length || null,
+    cpuMaxMHz: Number.isFinite(frequencyKHz) && frequencyKHz > 0 ? Math.round(frequencyKHz / 1000) : null,
+    memoryModules: null,
+    memorySpeedMHz: null,
+    motherboard: [stringOrNull(boardVendor), stringOrNull(boardName)].filter(Boolean).join(" ") || null
+  };
+};
+var readDarwinInfo = async () => {
+  const [hardware, version, build] = await Promise.all([
+    run(["/usr/sbin/sysctl", "sysctl"], ["-n", "hw.model", "hw.physicalcpu", "hw.logicalcpu", "hw.cpufrequency_max"]),
+    run(["/usr/bin/sw_vers", "sw_vers"], ["-productVersion"]),
+    run(["/usr/bin/sw_vers", "sw_vers"], ["-buildVersion"])
+  ]);
+  if (!hardware.ok)
+    return unavailable(hardware.missing ? "tool-missing" : "failed", "sysctl");
+  const values = hardware.stdout.trim().split(/\r?\n/);
+  const toNumber = (value) => {
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  };
+  const frequencyHz = toNumber(values[3]);
+  return {
+    manufacturer: "Apple",
+    model: values[0]?.trim() || null,
+    firmware: null,
+    osName: "macOS",
+    osVersion: version.ok ? version.stdout.trim() || null : os2.release(),
+    osDisplayVersion: version.ok ? version.stdout.trim() || null : null,
+    osBuild: build.ok ? build.stdout.trim() || null : null,
+    displayAdapters: [],
+    physicalCores: toNumber(values[1]),
+    logicalProcessors: toNumber(values[2]),
+    cpuMaxMHz: frequencyHz === null ? null : Math.round(frequencyHz / 1e6),
+    memoryModules: null,
+    memorySpeedMHz: null,
+    motherboard: null
   };
 };
 var readComputerInfo = async (platform) => {
-  if (platform !== "win32")
-    return unavailable("unsupported");
-  const result = await runPowerShell(WINDOWS_COMPUTER_INFO, 1e4);
-  if (!result.ok)
-    return unavailable(result.missing ? "tool-missing" : "failed", "powershell");
-  return parseComputerInfo(result.stdout) ?? unavailable("failed");
+  if (platform === "linux")
+    return readLinuxInfo();
+  if (platform === "darwin")
+    return readDarwinInfo();
+  if (platform === "win32") {
+    const result = await runPowerShell(WINDOWS_COMPUTER_INFO, 1e4);
+    if (!result.ok)
+      return unavailable(result.missing ? "tool-missing" : "failed", "powershell");
+    return parseComputerInfo(result.stdout) ?? unavailable("failed");
+  }
+  return unavailable("unsupported");
 };
 
 // src/service/collectors/parse-disks.ts
@@ -571,7 +899,7 @@ var linuxDisks = (rows, container) => {
       byFigures.set(key, row);
     }
   }
-  return [...byFigures.values()].map((row) => ({ mount: row.mount, label: null, used: row.used, total: row.used + row.available })).sort(byMount);
+  return [...byFigures.values()].map((row) => ({ mount: row.mount, label: null, used: row.used, total: row.used + row.available, device: row.filesystem })).sort(byMount);
 };
 var parseWindowsDisks = (text) => {
   let parsed;
@@ -598,6 +926,7 @@ var parseWindowsDisks = (text) => {
       label: typeof label === "string" && label.trim() ? label.trim() : null,
       used: size - free,
       total: size,
+      device: mount,
       ...typeof fileSystem === "string" && fileSystem.trim() ? { fileSystem: fileSystem.trim() } : {},
       ...driveType === 2 ? { driveType: "removable" } : driveType === 3 ? { driveType: "fixed" } : {}
     });
@@ -616,6 +945,23 @@ function byMount(left, right) {
 var WINDOWS_DISKS = 'Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=2 OR DriveType=3" | Select-Object DeviceID, VolumeName, Size, FreeSpace, FileSystem, DriveType | ConvertTo-Json -Compress';
 var WINDOWS_TIMEOUT_MS = 1e4;
 var DF = ["/bin/df", "/usr/bin/df", "df"];
+var deviceType = async (disk) => {
+  if (!disk.device?.startsWith("/dev/"))
+    return disk;
+  const block = disk.device.slice("/dev/".length);
+  if (/^(mapper|disk|loop)/.test(block))
+    return disk;
+  const queueBlock = block.replace(/p\d+$/, "");
+  const rotationalBlock = /^(nvme\d+n\d+|mmcblk\d+)$/.test(queueBlock) ? queueBlock : queueBlock.replace(/\d+$/, "");
+  if (!/^[a-zA-Z0-9_-]+$/.test(rotationalBlock))
+    return disk;
+  const rotational = (await readText(`/sys/class/block/${rotationalBlock}/queue/rotational`))?.trim();
+  if (rotational === "1")
+    return { ...disk, deviceType: "hdd" };
+  if (rotational === "0")
+    return { ...disk, deviceType: /^nvme/.test(rotationalBlock) ? "nvme" : "ssd" };
+  return disk;
+};
 var readDf = async () => {
   const local = await run(DF, ["-kPl"]);
   if (local.ok)
@@ -639,13 +985,134 @@ var readDisks = async (platform, container) => {
     const rows = parseDf(df.stdout);
     if (rows.length === 0)
       return unavailable("failed");
-    return platform === "darwin" ? darwinDisks(rows) : linuxDisks(rows, container);
+    if (platform === "darwin")
+      return darwinDisks(rows);
+    return Promise.all(linuxDisks(rows, container).map(deviceType));
   }
   return unavailable("unsupported");
 };
 
+// src/service/collectors/parse-disk-activity.ts
+var nonNegative = (value) => {
+  const number2 = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(number2) && number2 >= 0 ? number2 : null;
+};
+var parseProcDiskStats = (text) => text.split(/\r?\n/).flatMap((line) => {
+  const fields = line.trim().split(/\s+/);
+  if (fields.length < 14 || !fields[2])
+    return [];
+  const values = [3, 5, 6, 7, 9, 10, 12].map((index) => nonNegative(fields[index]));
+  if (values.some((value) => value === null))
+    return [];
+  if (values.some((value) => value === null))
+    return [];
+  return [{
+    device: fields[2],
+    reads: values[0],
+    readSectors: values[1],
+    readMs: values[2],
+    writes: values[3],
+    writeSectors: values[4],
+    writeMs: values[5],
+    busyMs: values[6]
+  }];
+});
+var diskActivityFromDelta = (current, previous, elapsedMs) => current.map((entry) => {
+  const before = previous?.find((item) => item.device === entry.device);
+  const deltas = before ? {
+    readSectors: entry.readSectors - before.readSectors,
+    writeSectors: entry.writeSectors - before.writeSectors,
+    reads: entry.reads - before.reads,
+    writes: entry.writes - before.writes,
+    readMs: entry.readMs - before.readMs,
+    writeMs: entry.writeMs - before.writeMs,
+    busyMs: entry.busyMs - before.busyMs
+  } : null;
+  const valid = deltas !== null && elapsedMs > 0 && Object.values(deltas).every((value) => value >= 0);
+  const readOps = valid ? deltas.reads : null;
+  const writeOps = valid ? deltas.writes : null;
+  const totalOps = readOps !== null && writeOps !== null ? readOps + writeOps : 0;
+  return {
+    device: entry.device,
+    readBytesPerSecond: valid ? deltas.readSectors * 512 * 1000 / elapsedMs : null,
+    writeBytesPerSecond: valid ? deltas.writeSectors * 512 * 1000 / elapsedMs : null,
+    readIops: valid ? readOps * 1000 / elapsedMs : null,
+    writeIops: valid ? writeOps * 1000 / elapsedMs : null,
+    activePercent: valid ? Math.min(100, deltas.busyMs * 100 / elapsedMs) : null,
+    responseMs: valid && totalOps > 0 ? (deltas.readMs + deltas.writeMs) / totalOps : null
+  };
+});
+var parseWindowsDiskActivity = (text) => {
+  let parsed;
+  try {
+    parsed = JSON.parse(text.trim() || "null");
+  } catch {
+    return null;
+  }
+  const rows = Array.isArray(parsed) ? parsed : parsed === null ? [] : [parsed];
+  const output = [];
+  for (const row of rows) {
+    if (typeof row !== "object" || row === null)
+      continue;
+    const device = Reflect.get(row, "Name");
+    if (typeof device !== "string" || !/^[A-Z]:$/i.test(device))
+      continue;
+    const read = nonNegative(Reflect.get(row, "DiskReadBytesPersec"));
+    const write = nonNegative(Reflect.get(row, "DiskWriteBytesPersec"));
+    const readIops = nonNegative(Reflect.get(row, "DiskReadsPersec"));
+    const writeIops = nonNegative(Reflect.get(row, "DiskWritesPersec"));
+    const active = nonNegative(Reflect.get(row, "PercentDiskTime"));
+    const readLatency = nonNegative(Reflect.get(row, "AvgDisksecPerRead"));
+    const writeLatency = nonNegative(Reflect.get(row, "AvgDisksecPerWrite"));
+    const latencies = [readLatency, writeLatency].filter((value) => value !== null);
+    output.push({
+      device,
+      readBytesPerSecond: read,
+      writeBytesPerSecond: write,
+      readIops,
+      writeIops,
+      activePercent: active === null ? null : Math.min(100, active),
+      responseMs: latencies.length ? latencies.reduce((sum, value) => sum + value, 0) / latencies.length * 1000 : null
+    });
+  }
+  return output;
+};
+
+// src/service/collectors/disk-activity.ts
+var WINDOWS_DISK_ACTIVITY = `
+$ErrorActionPreference = 'SilentlyContinue'
+@(Get-CimInstance Win32_PerfFormattedData_PerfDisk_LogicalDisk | Where-Object { $_.Name -match '^[A-Z]:$' } | Select-Object Name, DiskReadBytesPersec, DiskWriteBytesPersec, DiskReadsPersec, DiskWritesPersec, PercentDiskTime, AvgDisksecPerRead, AvgDisksecPerWrite) | ConvertTo-Json -Compress
+`;
+var createDiskActivityCollector = (platform, now) => {
+  let previous = null;
+  let previousAt = null;
+  return async () => {
+    const sampledAt = now();
+    if (platform === "linux") {
+      const text = await readText("/proc/diskstats");
+      if (text === null)
+        return unavailable("failed");
+      const current = parseProcDiskStats(text);
+      const items = diskActivityFromDelta(current, previous, previousAt === null ? 0 : sampledAt - previousAt);
+      previous = current;
+      previousAt = sampledAt;
+      return items.length > 0 ? { status: "ok", items, sampledAt } : unavailable("no-device");
+    }
+    if (platform === "win32") {
+      const result = await runPowerShell(WINDOWS_DISK_ACTIVITY, 8000);
+      if (!result.ok)
+        return unavailable(result.missing ? "tool-missing" : "failed", "powershell");
+      const items = parseWindowsDiskActivity(result.stdout);
+      if (items === null)
+        return unavailable("failed");
+      return items.length > 0 ? { status: "ok", items, sampledAt } : unavailable("no-device");
+    }
+    return unavailable(platform === "darwin" ? "unsupported" : "unsupported");
+  };
+};
+
 // src/service/collectors/gpu.ts
-import { readdir } from "node:fs/promises";
+import { readdir as readdir3 } from "node:fs/promises";
 
 // src/service/collectors/parse-gpu.ts
 var MIB2 = 1024 * 1024;
@@ -685,14 +1152,25 @@ var parseNvidiaSmi = (text) => {
     const parts = line.split(",").map((part) => part.trim());
     if (parts.length < 4)
       continue;
-    const total = numberOrNull2(parts.pop());
-    const used = numberOrNull2(parts.pop());
-    const utilization = numberOrNull2(parts.pop());
+    const extended = parts.length >= 9;
+    const columns = extended ? parts.slice(-8) : parts.slice(-3);
+    const name = parts.slice(0, parts.length - columns.length).join(", ") || "NVIDIA GPU";
+    const [utilizationText, usedText, totalText, temperatureText, frequencyText, powerText, fanText, driverText] = columns;
+    const utilization = numberOrNull2(utilizationText);
+    const used = numberOrNull2(usedText);
+    const total = numberOrNull2(totalText);
     devices.push({
-      name: parts.join(", ") || "NVIDIA GPU",
+      name,
       utilization: percent(utilization),
       memUsed: used === null ? null : used * MIB2,
-      memTotal: total === null ? null : total * MIB2
+      memTotal: total === null ? null : total * MIB2,
+      ...extended ? {
+        temperatureC: numberOrNull2(temperatureText),
+        frequencyMHz: numberOrNull2(frequencyText),
+        powerW: numberOrNull2(powerText),
+        fanPercent: numberOrNull2(fanText),
+        driverVersion: driverText && driverText !== "N/A" ? driverText : null
+      } : {}
     });
   }
   return devices;
@@ -769,17 +1247,23 @@ var parseWindowsGpu = (line) => {
 };
 
 // src/service/collectors/gpu.ts
-var NVIDIA_ARGS = ["--query-gpu=name,utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"];
+var NVIDIA_ARGS = ["--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,clocks.gr,power.draw,fan.speed,driver_version", "--format=csv,noheader,nounits"];
+var NVIDIA_BASIC_ARGS = ["--query-gpu=name,utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"];
 var WINDOWS_FIRST_SAMPLE_MS = 8000;
 var found = (devices) => devices.length > 0 ? { status: "ok", devices } : unavailable("no-device");
 var readNvidia = async (commands) => {
   const result = await run(commands, NVIDIA_ARGS);
-  if (!result.ok)
-    return { missing: result.missing };
-  return { devices: parseNvidiaSmi(result.stdout) };
+  if (result.ok)
+    return { devices: parseNvidiaSmi(result.stdout) };
+  if (result.missing)
+    return { missing: true };
+  const basic = await run(commands, NVIDIA_BASIC_ARGS);
+  if (!basic.ok)
+    return { missing: basic.missing };
+  return { devices: parseNvidiaSmi(basic.stdout) };
 };
 var readAmdCards = async () => {
-  const entries = await readdir("/sys/class/drm").catch(() => []);
+  const entries = await readdir3("/sys/class/drm").catch(() => []);
   const cards = entries.filter((name) => /^card\d+$/.test(name));
   return Promise.all(cards.map(async (card) => {
     const base = `/sys/class/drm/${card}/device`;
@@ -853,6 +1337,420 @@ var createGpuCollector = (platform) => {
   } };
 };
 
+// src/service/collectors/parse-network.ts
+var byteCount = (value) => {
+  const number2 = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isSafeInteger(number2) && number2 >= 0 ? number2 : null;
+};
+var linkSpeed = (value) => {
+  if (typeof value === "number")
+    return Number.isFinite(value) && value > 0 ? value : null;
+  if (typeof value !== "string")
+    return null;
+  const match = /^\s*(\d+(?:\.\d+)?)\s*(bps|kbps|mbps|gbps|tbps)\s*$/i.exec(value);
+  if (!match?.[1] || !match[2])
+    return null;
+  const multiplier = { bps: 1, kbps: 1000, mbps: 1e6, gbps: 1e9, tbps: 1000000000000 }[match[2].toLowerCase()];
+  const parsed = Number(match[1]) * multiplier;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+var row = (name, receivedBytes, sentBytes, isDefault = null) => {
+  const received = byteCount(receivedBytes);
+  const sent = byteCount(sentBytes);
+  if (!name || name === "lo" || name === "lo0" || name.toLowerCase().includes("loopback") || received === null || sent === null)
+    return null;
+  return {
+    name: name.slice(0, 80),
+    receivedBytes: received,
+    sentBytes: sent,
+    downloadBytesPerSecond: null,
+    uploadBytesPerSecond: null,
+    isDefault,
+    linkSpeedBps: null
+  };
+};
+var parseProcNetDev = (text, defaultInterface = null) => {
+  const result = [];
+  for (const line of text.split(/\r?\n/).slice(2)) {
+    const match = /^\s*([^:]+):\s*(.+)$/.exec(line);
+    if (!match?.[1] || !match[2])
+      continue;
+    const name = match[1].trim();
+    const fields = match[2].trim().split(/\s+/);
+    if (fields.length < 9)
+      continue;
+    const parsed = row(name, fields[0], fields[8], defaultInterface === null ? null : name === defaultInterface);
+    if (parsed)
+      result.push(parsed);
+  }
+  return result;
+};
+var parseDefaultRoute = (text) => {
+  const route = text.split(/\r?\n/).slice(1).map((line) => line.trim().split(/\s+/)).find((fields) => fields[1] === "00000000" && fields[0] && (Number.parseInt(fields[3] ?? "", 16) & 1) === 1);
+  return route?.[0] ?? null;
+};
+var parseDarwinNetstat = (text) => {
+  const result = new Map;
+  let receivedIndex = -1;
+  let sentIndex = -1;
+  for (const line of text.split(/\r?\n/)) {
+    const fields = line.trim().split(/\s+/);
+    if (fields[0] === "Name") {
+      receivedIndex = fields.findIndex((field2) => field2.toLowerCase() === "ibytes");
+      sentIndex = fields.findIndex((field2) => field2.toLowerCase() === "obytes");
+      continue;
+    }
+    if (receivedIndex < 0 || sentIndex < 0 || fields.length <= Math.max(receivedIndex, sentIndex))
+      continue;
+    const parsed = row(fields[0] ?? "", fields[receivedIndex], fields[sentIndex]);
+    if (parsed)
+      result.set(parsed.name, parsed);
+  }
+  return [...result.values()];
+};
+var parseDarwinDefaultRoute = (text) => /^interface:\s*(\S+)\s*$/mi.exec(text)?.[1] ?? null;
+var parseWindowsNetwork = (text) => {
+  let value;
+  try {
+    value = JSON.parse(text.trim() || "null");
+  } catch {
+    return null;
+  }
+  const rows = Array.isArray(value) ? value : value === null ? [] : [value];
+  const result = [];
+  for (const item of rows) {
+    if (typeof item !== "object" || item === null)
+      continue;
+    const parsed = row(String(Reflect.get(item, "Name") ?? ""), Reflect.get(item, "ReceivedBytes"), Reflect.get(item, "SentBytes"), typeof Reflect.get(item, "Default") === "boolean" ? Reflect.get(item, "Default") : null);
+    if (parsed)
+      result.push({ ...parsed, linkSpeedBps: linkSpeed(Reflect.get(item, "LinkSpeed")) });
+  }
+  return result;
+};
+var deriveNetworkRates = (current, previous, elapsedMs) => current.map((item) => {
+  const before = previous?.find((entry) => entry.name === item.name);
+  if (!before || elapsedMs <= 0 || item.receivedBytes < before.receivedBytes || item.sentBytes < before.sentBytes)
+    return item;
+  return {
+    ...item,
+    downloadBytesPerSecond: (item.receivedBytes - before.receivedBytes) * 1000 / elapsedMs,
+    uploadBytesPerSecond: (item.sentBytes - before.sentBytes) * 1000 / elapsedMs
+  };
+});
+
+// src/service/collectors/network.ts
+var WINDOWS_NETWORK = `
+$ErrorActionPreference = 'SilentlyContinue'
+$defaultRoute = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Sort-Object RouteMetric, InterfaceMetric | Select-Object -First 1
+$defaultIndex = if ($defaultRoute) { $defaultRoute.InterfaceIndex } else { $null }
+@(Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object {
+  $stats = $_ | Get-NetAdapterStatistics
+  $isDefault = $null
+  if ($null -ne $defaultIndex) { $isDefault = $_.ifIndex -eq $defaultIndex }
+  [pscustomobject]@{ Name = $_.Name; ReceivedBytes = $stats.ReceivedBytes; SentBytes = $stats.SentBytes; Default = $isDefault; LinkSpeed = $_.LinkSpeed }
+}) | ConvertTo-Json -Compress
+`;
+var activeLinuxInterfaces = async (interfaces) => Promise.all(interfaces.map(async (item) => {
+  if (!/^[A-Za-z0-9_.:-]{1,80}$/.test(item.name))
+    return null;
+  const [state, speed] = await Promise.all([
+    readText(`/sys/class/net/${item.name}/operstate`),
+    readText(`/sys/class/net/${item.name}/speed`)
+  ]);
+  if (state?.trim() === "down")
+    return null;
+  const mbps = speed?.trim() ? Number(speed.trim()) : NaN;
+  return { ...item, linkSpeedBps: Number.isFinite(mbps) && mbps > 0 ? mbps * 1e6 : null };
+}));
+var readNetwork = async (platform, now) => {
+  let interfaces;
+  if (platform === "linux") {
+    const [dev, route] = await Promise.all([readText("/proc/net/dev"), readText("/proc/net/route")]);
+    if (dev === null)
+      return unavailable("failed");
+    interfaces = (await activeLinuxInterfaces(parseProcNetDev(dev, route === null ? null : parseDefaultRoute(route)))).filter((item) => item !== null);
+  } else if (platform === "darwin") {
+    const [result, route] = await Promise.all([
+      run(["/usr/sbin/netstat", "/usr/bin/netstat", "netstat"], ["-ibn"]),
+      run(["/sbin/route", "/usr/sbin/route", "route"], ["-n", "get", "default"])
+    ]);
+    if (!result.ok)
+      return unavailable(result.missing ? "tool-missing" : "failed", "netstat");
+    interfaces = parseDarwinNetstat(result.stdout);
+    const defaultInterface = route.ok ? parseDarwinDefaultRoute(route.stdout) : null;
+    if (defaultInterface)
+      interfaces = interfaces.map((item) => ({ ...item, isDefault: item.name === defaultInterface }));
+  } else if (platform === "win32") {
+    const result = await runPowerShell(WINDOWS_NETWORK, 8000);
+    if (!result.ok)
+      return unavailable(result.missing ? "tool-missing" : "failed", "powershell");
+    interfaces = parseWindowsNetwork(result.stdout);
+    if (interfaces === null)
+      return unavailable("failed");
+  } else
+    return unavailable("unsupported");
+  return interfaces.length === 0 ? unavailable("no-device") : { status: "ok", interfaces, sampledAt: now };
+};
+
+// src/service/collectors/processes.ts
+import os3 from "node:os";
+import { readdir as readdir4 } from "node:fs/promises";
+
+// src/service/collectors/parse-processes.ts
+var safeNumber = (value) => {
+  const number2 = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(number2) && number2 >= 0 ? number2 : null;
+};
+var safeName = (value) => {
+  if (typeof value !== "string")
+    return null;
+  const name = value.trim().split(/[\\/]/).at(-1)?.slice(0, 100);
+  return name && name !== "." ? name : null;
+};
+var parseLinuxProcessStat = (text) => {
+  const match = /^(\d+) \((.*)\) ([^ ]+) (.*)$/.exec(text.trim());
+  if (!match?.[1] || match[2] === undefined || !match[4])
+    return null;
+  const pid = Number(match[1]);
+  const fields = match[4].split(/\s+/);
+  const userTicks = safeNumber(fields[10]);
+  const systemTicks = safeNumber(fields[11]);
+  const name = safeName(match[2]);
+  if (!Number.isSafeInteger(pid) || pid <= 0 || !name || userTicks === null || systemTicks === null)
+    return null;
+  return { pid, name, cpuTicks: userTicks + systemTicks };
+};
+var parseLinuxProcessMemory = (text) => {
+  const match = /^VmRSS:\s+(\d+) kB$/m.exec(text);
+  const kib = match?.[1] ? Number(match[1]) : NaN;
+  return Number.isSafeInteger(kib) && kib >= 0 ? kib * 1024 : null;
+};
+var parseLinuxTotalCpuTicks = (text) => {
+  const match = /^cpu\s+(.+)$/m.exec(text);
+  if (!match?.[1])
+    return null;
+  const values = match[1].trim().split(/\s+/).map(Number);
+  const total = values.reduce((sum, value) => sum + (Number.isFinite(value) && value >= 0 ? value : 0), 0);
+  return values.length >= 4 && Number.isSafeInteger(total) && total > 0 ? total : null;
+};
+var jsonRows = (text) => {
+  try {
+    const value = JSON.parse(text.trim() || "null");
+    return Array.isArray(value) ? value : value === null ? [] : [value];
+  } catch {
+    return null;
+  }
+};
+var parseWindowsProcesses = (text, limit = 20) => {
+  const rows = jsonRows(text);
+  if (rows === null)
+    return null;
+  const result = [];
+  for (const value of rows) {
+    if (typeof value !== "object" || value === null)
+      continue;
+    const pid = safeNumber(Reflect.get(value, "IDProcess") ?? Reflect.get(value, "IdProcess"));
+    const name = safeName(Reflect.get(value, "Name"));
+    const cpuPercent = safeNumber(Reflect.get(value, "PercentProcessorTime"));
+    const memoryBytes = safeNumber(Reflect.get(value, "WorkingSetPrivate"));
+    if (pid === null || pid <= 0 || !name)
+      continue;
+    result.push({ pid, name, cpuPercent, memoryBytes });
+  }
+  return result.slice(0, limit);
+};
+var parsePsProcesses = (text, limit = 20) => {
+  const result = [];
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^\s*(\d+)\s+(.+?)\s+(\d+(?:\.\d+)?)\s+(\d+)\s*$/.exec(line);
+    if (!match?.[1] || !match[2] || !match[3] || !match[4])
+      continue;
+    const pid = Number(match[1]);
+    const name = safeName(match[2]);
+    const cpuPercent = Number(match[3]);
+    const rssKib = Number(match[4]);
+    if (!Number.isSafeInteger(pid) || pid <= 0 || !name || !Number.isFinite(cpuPercent) || !Number.isSafeInteger(rssKib))
+      continue;
+    result.push({ pid, name, cpuPercent: Math.max(0, cpuPercent), memoryBytes: Math.max(0, rssKib) * 1024 });
+  }
+  return result.slice(0, limit);
+};
+var rankProcesses = (entries, limit) => ({
+  topCpu: [...entries].filter((item) => item.cpuPercent !== null).sort((a, b) => (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1)).slice(0, limit),
+  topMemory: [...entries].filter((item) => item.memoryBytes !== null).sort((a, b) => (b.memoryBytes ?? -1) - (a.memoryBytes ?? -1)).slice(0, limit)
+});
+
+// src/service/collectors/processes.ts
+var WINDOWS_PROCESSES = `
+$ErrorActionPreference = 'SilentlyContinue'
+$rows = @(Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object { $_.IDProcess -gt 0 -and $_.Name -ne '_Total' } | Select-Object Name, IDProcess, PercentProcessorTime, WorkingSetPrivate)
+$cpu = @($rows | Sort-Object { [double]$_.PercentProcessorTime } -Descending | Select-Object -First 20)
+$mem = @($rows | Sort-Object { [double]$_.WorkingSetPrivate } -Descending | Select-Object -First 20)
+@{ topCpu = $cpu; topMemory = $mem } | ConvertTo-Json -Compress -Depth 3
+`;
+var createProcessCollector = (platform, now) => {
+  let previousCpuTicks = null;
+  let previousSystemTicks = null;
+  const readLinux = async (limit) => {
+    let pids;
+    try {
+      pids = (await readdir4("/proc")).filter((name) => /^\d+$/.test(name)).slice(0, 2048);
+    } catch {
+      return unavailable("failed");
+    }
+    const systemTicks = parseLinuxTotalCpuTicks(await readText("/proc/stat") ?? "");
+    if (systemTicks === null)
+      return unavailable("failed");
+    const current = [];
+    for (let offset = 0;offset < pids.length; offset += 64) {
+      const chunk = await Promise.all(pids.slice(offset, offset + 64).map(async (pidText) => {
+        const [statText, statusText] = await Promise.all([
+          readText(`/proc/${pidText}/stat`),
+          readText(`/proc/${pidText}/status`)
+        ]);
+        const parsed = statText ? parseLinuxProcessStat(statText) : null;
+        if (!parsed)
+          return null;
+        return {
+          pid: parsed.pid,
+          name: parsed.name,
+          cpuTicks: parsed.cpuTicks,
+          memoryBytes: statusText ? parseLinuxProcessMemory(statusText) : null
+        };
+      }));
+      current.push(...chunk.filter((item) => item !== null));
+    }
+    const totalDelta = previousSystemTicks === null ? null : systemTicks - previousSystemTicks;
+    const previous = previousCpuTicks;
+    const entries = current.map((item) => {
+      const before = previous?.get(item.pid);
+      const delta = before === undefined ? null : item.cpuTicks - before;
+      const cpuPercent = delta === null || totalDelta === null || totalDelta <= 0 || delta < 0 ? null : Math.min(100, delta / totalDelta * 100);
+      return { pid: item.pid, name: item.name, cpuPercent, memoryBytes: item.memoryBytes };
+    });
+    previousCpuTicks = new Map(current.map((item) => [item.pid, item.cpuTicks]));
+    previousSystemTicks = systemTicks;
+    const ranked = rankProcesses(entries, limit);
+    return { status: "ok", ...ranked, sampledAt: now() };
+  };
+  const readOther = async (limit) => {
+    let entries;
+    if (platform === "win32") {
+      const result = await runPowerShell(WINDOWS_PROCESSES, 8000);
+      if (!result.ok)
+        return unavailable(result.missing ? "tool-missing" : "failed", "powershell");
+      let data;
+      try {
+        data = JSON.parse(result.stdout.trim() || "{}");
+      } catch {
+        return unavailable("failed");
+      }
+      const fields = (key) => {
+        const value = typeof data === "object" && data !== null ? Reflect.get(data, key) : undefined;
+        return JSON.stringify(value ?? []);
+      };
+      const cpu = parseWindowsProcesses(fields("topCpu"), 20)?.map((item) => ({
+        ...item,
+        cpuPercent: item.cpuPercent === null ? null : Math.min(100, item.cpuPercent / Math.max(1, os3.cpus().length))
+      })) ?? null;
+      const memory = parseWindowsProcesses(fields("topMemory"), 20);
+      if (cpu === null || memory === null)
+        return unavailable("failed");
+      const union = new Map;
+      for (const item of [...cpu, ...memory])
+        union.set(item.pid, { ...union.get(item.pid), ...item });
+      const ranked = rankProcesses([...union.values()], limit);
+      return { status: "ok", ...ranked, sampledAt: now() };
+    }
+    if (platform === "darwin") {
+      const result = await run(["/bin/ps", "ps"], ["-Ao", "pid=,comm=,%cpu=,rss="]);
+      if (!result.ok)
+        return unavailable(result.missing ? "tool-missing" : "failed", "ps");
+      entries = parsePsProcesses(result.stdout, 2048);
+      if (entries === null)
+        return unavailable("failed");
+      const ranked = rankProcesses(entries, limit);
+      return { status: "ok", ...ranked, sampledAt: now() };
+    }
+    return unavailable("unsupported");
+  };
+  return { read: (limit) => platform === "linux" ? readLinux(limit) : readOther(limit) };
+};
+
+// src/service/collectors/sensors.ts
+import { readdir as readdir5 } from "node:fs/promises";
+
+// src/service/collectors/parse-sensors.ts
+var parseHwmonReading = (chip, label, raw) => {
+  const milliCelsius = Number(raw.trim());
+  const temperatureC = milliCelsius / 1000;
+  if (!Number.isFinite(milliCelsius) || temperatureC < -40 || temperatureC > 150)
+    return null;
+  const name = `${chip.trim()} ${label.trim()}`.trim().slice(0, 80);
+  if (!name)
+    return null;
+  const probe = `${chip} ${label}`.toLowerCase();
+  const kind = /nvme|drivetemp|drive temperature/.test(probe) ? "disk" : /amdgpu|i915|nouveau|nvidia|gpu/.test(probe) ? "gpu" : /cpu|coretemp|k10temp|zenpower|package/.test(probe) ? "cpu" : "other";
+  return { name, kind, temperatureC: Math.round(temperatureC * 10) / 10 };
+};
+var parseNvidiaTemperatures = (text) => text.split(/\r?\n/).flatMap((line, index) => {
+  const [name, raw] = line.split(",").map((part) => part?.trim());
+  const value = Number(raw);
+  if (!name || !Number.isFinite(value) || value < -40 || value > 150)
+    return [];
+  return [{ name: `${name} GPU`, kind: "gpu", temperatureC: value }];
+});
+
+// src/service/collectors/sensors.ts
+var readLinux = async () => {
+  let controllers;
+  try {
+    controllers = await readdir5("/sys/class/hwmon");
+  } catch {
+    return unavailable("no-device");
+  }
+  const readings = [];
+  for (const controller of controllers.slice(0, 64)) {
+    const base = `/sys/class/hwmon/${controller}`;
+    const [chip, files] = await Promise.all([readText(`${base}/name`), readdir5(base).catch(() => [])]);
+    if (!chip)
+      continue;
+    const inputs = files.filter((name) => /^temp\d+_input$/.test(name)).slice(0, 32);
+    for (const input of inputs) {
+      const index = /^temp(\d+)_input$/.exec(input)?.[1];
+      if (!index)
+        continue;
+      const [raw, label] = await Promise.all([
+        readText(`${base}/${input}`),
+        readText(`${base}/temp${index}_label`)
+      ]);
+      if (raw === null)
+        continue;
+      const parsed = parseHwmonReading(chip, label ?? `Sensor ${index}`, raw);
+      if (parsed)
+        readings.push(parsed);
+    }
+  }
+  const nvidia = await run(["nvidia-smi"], ["--query-gpu=name,temperature.gpu", "--format=csv,noheader,nounits"]);
+  if (nvidia.ok)
+    readings.push(...parseNvidiaTemperatures(nvidia.stdout));
+  return readings.length > 0 ? { status: "ok", readings, sampledAt: Date.now() } : unavailable("no-device");
+};
+var readNvidia2 = async () => {
+  const result = await run(["nvidia-smi.exe", "nvidia-smi"], ["--query-gpu=name,temperature.gpu", "--format=csv,noheader,nounits"]);
+  if (!result.ok)
+    return unavailable(result.missing ? "no-device" : "failed", result.missing ? null : "nvidia-smi");
+  const readings = parseNvidiaTemperatures(result.stdout);
+  return readings.length > 0 ? { status: "ok", readings, sampledAt: Date.now() } : unavailable("no-device");
+};
+var readSensors = async (platform) => {
+  if (platform === "linux")
+    return readLinux();
+  if (platform === "win32")
+    return readNvidia2();
+  return unavailable(platform === "darwin" ? "unsupported" : "unsupported");
+};
+
 // src/service/env.ts
 import { existsSync } from "node:fs";
 import { readFile as readFile2 } from "node:fs/promises";
@@ -874,31 +1772,47 @@ var detectContainer = async (platform) => {
 };
 
 // src/service/sampler.ts
-import os2 from "node:os";
+import os4 from "node:os";
 
 // src/service/warnings.ts
-var SUSTAINED_SAMPLES = 30;
-var sustainedHigh = (history) => {
-  if (history.length < SUSTAINED_SAMPLES)
+var sustainedHigh = (history, threshold2 = WARN_PERCENT, seconds = 60) => {
+  const required = Math.max(1, Math.ceil(seconds * 1000 / SAMPLE_INTERVAL_MS));
+  if (history.length < required)
     return false;
-  return history.slice(-SUSTAINED_SAMPLES).every((value) => value !== null && value >= WARN_PERCENT);
+  return history.slice(-required).every((value) => value !== null && value >= threshold2);
 };
-var evaluateWarnings = (input) => {
+var levelAt = (percent2, warning, critical) => percent2 >= critical ? "critical" : percent2 >= warning ? "warn" : null;
+var evaluateWarnings = (input, settings = DEFAULT_MONITOR_SETTINGS) => {
   const warnings = [];
-  if (input.cpu.status === "ok" && sustainedHigh(input.cpuHistory)) {
-    warnings.push({ kind: "cpu", target: null, level: "warn" });
+  const thresholds = settings.thresholds;
+  if (input.cpu.status === "ok" && input.cpuHistory.length > 0) {
+    const critical = sustainedHigh(input.cpuHistory, thresholds.cpuCritical, thresholds.sustainedSeconds);
+    const elevated = critical || sustainedHigh(input.cpuHistory, thresholds.cpuWarning, thresholds.sustainedSeconds);
+    if (elevated)
+      warnings.push({ kind: "cpu", target: null, level: critical ? "critical" : "warn" });
   }
   if (input.memory.status === "ok" && input.memory.total > 0) {
-    const level = levelForPercent(input.memory.used / input.memory.total * 100);
+    const level = levelAt(input.memory.used / input.memory.total * 100, thresholds.memoryWarning, thresholds.memoryCritical);
     if (level)
       warnings.push({ kind: "memory", target: null, level });
+    if (input.memory.swapTotal && input.memory.swapUsed !== null) {
+      const swapPercent = input.memory.swapUsed / input.memory.swapTotal * 100;
+      if (swapPercent >= thresholds.swapWarning)
+        warnings.push({ kind: "swap", target: null, level: "warn" });
+    }
   }
-  if (sustainedHigh(input.gpuHistory)) {
-    warnings.push({ kind: "gpu", target: null, level: "warn" });
+  if (input.gpuHistory.length > 0) {
+    const critical = sustainedHigh(input.gpuHistory, thresholds.gpuCritical, thresholds.sustainedSeconds);
+    const elevated = critical || sustainedHigh(input.gpuHistory, thresholds.gpuWarning, thresholds.sustainedSeconds);
+    if (elevated)
+      warnings.push({ kind: "gpu", target: null, level: critical ? "critical" : "warn" });
   }
   if (input.disks.status === "ok") {
     for (const disk of input.disks.items) {
-      const level = levelForPercent(diskPercent(disk));
+      const percent2 = diskPercent(disk);
+      if (percent2 === null)
+        continue;
+      const level = levelAt(percent2, thresholds.diskWarning, thresholds.diskCritical);
       if (level)
         warnings.push({ kind: "disk", target: disk.mount, level });
     }
@@ -906,10 +1820,30 @@ var evaluateWarnings = (input) => {
   return warnings;
 };
 
+// src/shared/health.ts
+var missing = (source) => source.status === "unavailable" && source.reason !== "no-device";
+var evaluateHealth = (stats) => {
+  const criticalCount = stats.warnings.filter((warning) => warning.level === "critical").length;
+  const warningCount = stats.warnings.length;
+  const unavailableCount = [stats.cpu, stats.memory, stats.disks].filter(missing).length;
+  const coreUnavailable = unavailableCount === 3;
+  return {
+    state: coreUnavailable ? "unavailable" : criticalCount > 0 ? "critical" : warningCount > 0 ? "attention" : "healthy",
+    warningCount,
+    criticalCount,
+    unavailableCount
+  };
+};
+
 // src/service/sampler.ts
 var PRIME_MS = 500;
 var COMPUTER_INFO_INTERVAL_MS = 5 * 60000;
-var freshSource = () => ({ value: unavailable("failed"), lastGood: null, failures: 0, retryAt: 0 });
+var NETWORK_INTERVAL_MS = 5000;
+var PROCESS_INTERVAL_MS = 1e4;
+var SENSOR_INTERVAL_MS = 1e4;
+var BATTERY_INTERVAL_MS = 30000;
+var DISK_ACTIVITY_INTERVAL_MS = 5000;
+var freshSource = () => ({ value: unavailable("pending"), lastGood: null, failures: 0, retryAt: 0 });
 var settle = (source, result, now) => {
   if (result.status === "ok") {
     source.value = result;
@@ -937,14 +1871,35 @@ var safely = async (read) => {
   }
 };
 var due = (source, now) => source.retryAt <= now;
-var pushHistory = (history, value) => {
-  history.push(value);
-  if (history.length > HISTORY_LENGTH)
-    history.splice(0, history.length - HISTORY_LENGTH);
-};
+
+class RingBuffer {
+  points;
+  next = 0;
+  count = 0;
+  constructor(length) {
+    this.points = Array.from({ length }, () => null);
+  }
+  push(value) {
+    this.points[this.next] = value;
+    this.next = (this.next + 1) % this.points.length;
+    this.count = Math.min(this.points.length, this.count + 1);
+  }
+  clear() {
+    this.next = 0;
+    this.count = 0;
+    this.points.fill(null);
+  }
+  values() {
+    if (this.count < this.points.length)
+      return this.points.slice(0, this.count);
+    return [...this.points.slice(this.next), ...this.points.slice(0, this.next)];
+  }
+}
+var pushHistory = (history, value) => history.push(value);
 var createSampler = (deps) => {
   let generation = 0;
   let active = false;
+  let paused = false;
   let lastRequest = 0;
   let cancelTimer = null;
   let first = null;
@@ -953,21 +1908,57 @@ var createSampler = (deps) => {
   let memory = freshSource();
   let gpu = freshSource();
   let disks = freshSource();
+  let diskActivity = freshSource();
+  let network = freshSource();
+  let processes = freshSource();
+  let battery = freshSource();
+  let sensors = freshSource();
   let disksDueAt = 0;
+  let networkDueAt = 0;
+  let processesDueAt = 0;
+  let batteryDueAt = 0;
+  let sensorsDueAt = 0;
+  let diskActivityDueAt = 0;
   let computerInfo = null;
   let computerInfoDueAt = 0;
-  let cpuHistory = [];
-  let gpuHistory = [];
+  const cpuHistory = new RingBuffer(HISTORY_LENGTH);
+  const gpuHistory = new RingBuffer(HISTORY_LENGTH);
+  const memoryHistory = new RingBuffer(HISTORY_LENGTH);
+  const networkDownHistory = new RingBuffer(HISTORY_LENGTH);
+  const networkUpHistory = new RingBuffer(HISTORY_LENGTH);
+  const cpuWarningHistory = new RingBuffer(WARNING_HISTORY_LENGTH);
+  const gpuWarningHistory = new RingBuffer(WARNING_HISTORY_LENGTH);
+  let historyIntervalMs = 0;
+  let lastHistoryAt = 0;
+  let previousNetwork = null;
   const reset = () => {
     cpu = freshSource();
     memory = freshSource();
     gpu = freshSource();
     disks = freshSource();
+    diskActivity = freshSource();
+    network = freshSource();
+    processes = freshSource();
+    battery = freshSource();
+    sensors = freshSource();
     disksDueAt = 0;
+    networkDueAt = 0;
+    processesDueAt = 0;
+    batteryDueAt = 0;
+    sensorsDueAt = 0;
+    diskActivityDueAt = 0;
     computerInfo = null;
     computerInfoDueAt = 0;
-    cpuHistory = [];
-    gpuHistory = [];
+    cpuHistory.clear();
+    gpuHistory.clear();
+    memoryHistory.clear();
+    networkDownHistory.clear();
+    networkUpHistory.clear();
+    cpuWarningHistory.clear();
+    gpuWarningHistory.clear();
+    historyIntervalMs = 0;
+    lastHistoryAt = 0;
+    previousNetwork = null;
     snapshot = null;
   };
   const stop = () => {
@@ -979,46 +1970,72 @@ var createSampler = (deps) => {
     deps.gpu.stop();
     reset();
   };
-  const tick = async (current) => {
-    const now = deps.now();
-    const readDisks = due(disks, now) && now >= disksDueAt;
-    const readComputerInfo = deps.computerInfo !== undefined && now >= computerInfoDueAt;
-    const [cpuResult, memoryResult, gpuResult, diskResult, computerInfoResult] = await Promise.all([
-      due(cpu, now) ? safely(deps.cpuMem.cpu) : null,
-      due(memory, now) ? safely(deps.cpuMem.memory) : null,
-      due(gpu, now) ? safely(deps.gpu.read) : null,
-      readDisks ? safely(deps.disks) : null,
-      readComputerInfo ? safely(deps.computerInfo) : null
-    ]);
-    if (current !== generation)
+  const pause = () => {
+    if (paused)
       return;
-    const settledAt = deps.now();
-    if (cpuResult)
-      settle(cpu, cpuResult, settledAt);
-    if (memoryResult)
-      settle(memory, memoryResult, settledAt);
-    if (gpuResult)
-      settle(gpu, gpuResult, settledAt);
-    if (diskResult) {
-      settle(disks, Array.isArray(diskResult) ? { status: "ok", items: diskResult, sampledAt: settledAt } : diskResult, settledAt);
-      disksDueAt = settledAt + DISK_INTERVAL_MS;
+    paused = true;
+    generation += 1;
+    active = false;
+    first = null;
+    cancelTimer?.();
+    cancelTimer = null;
+    deps.gpu.stop();
+  };
+  const resume = () => {
+    if (!paused)
+      return;
+    paused = false;
+    if (snapshot)
+      first = start();
+  };
+  const inFlight = new Map;
+  const publish = (sampledAt, recordHistory) => {
+    const settings = deps.settings?.() ?? DEFAULT_MONITOR_SETTINGS;
+    if (recordHistory) {
+      const cpuPoint = cpu.value.status === "ok" ? cpu.value.total : null;
+      const gpuPoint = busiestGpu(gpu.value);
+      const memoryPoint = memory.value.status === "ok" && memory.value.total > 0 ? memory.value.used / memory.value.total * 100 : null;
+      const rates = network.value.status === "ok" ? network.value.interfaces : [];
+      const down = rates.map((item) => item.downloadBytesPerSecond).filter((value) => value !== null);
+      const up = rates.map((item) => item.uploadBytesPerSecond).filter((value) => value !== null);
+      cpuWarningHistory.push(cpuPoint);
+      gpuWarningHistory.push(gpuPoint);
+      const nextHistoryInterval = Math.floor(settings.historyMinutes * 60000 / HISTORY_LENGTH);
+      if (nextHistoryInterval !== historyIntervalMs) {
+        historyIntervalMs = nextHistoryInterval;
+        lastHistoryAt = 0;
+        cpuHistory.clear();
+        gpuHistory.clear();
+        memoryHistory.clear();
+        networkDownHistory.clear();
+        networkUpHistory.clear();
+      }
+      if (lastHistoryAt === 0 || sampledAt - lastHistoryAt >= historyIntervalMs) {
+        pushHistory(cpuHistory, cpuPoint);
+        pushHistory(gpuHistory, gpuPoint);
+        pushHistory(memoryHistory, memoryPoint);
+        pushHistory(networkDownHistory, down.length > 0 ? down.reduce((sum, value) => sum + value, 0) : null);
+        pushHistory(networkUpHistory, up.length > 0 ? up.reduce((sum, value) => sum + value, 0) : null);
+        lastHistoryAt = sampledAt;
+      }
     }
-    if (computerInfoResult) {
-      computerInfo = "status" in computerInfoResult ? null : computerInfoResult;
-      computerInfoDueAt = settledAt + COMPUTER_INFO_INTERVAL_MS;
-    }
-    pushHistory(cpuHistory, cpu.value.status === "ok" ? cpu.value.total : null);
-    pushHistory(gpuHistory, busiestGpu(gpu.value));
-    snapshot = {
-      sampledAt: settledAt,
+    const warnings = evaluateWarnings({
+      cpu: cpu.value,
+      memory: memory.value,
+      disks: disks.value,
+      cpuHistory: cpuWarningHistory.values(),
+      gpuHistory: gpuWarningHistory.values()
+    }, settings);
+    const nextSnapshot = {
+      sampledAt,
       environment: {
         platform: deps.platform,
         container: deps.container,
         computer: {
-          hostName: os2.hostname() || null,
-          operatingSystem: [deps.platform === "win32" ? "Windows" : deps.platform === "darwin" ? "macOS" : os2.type(), os2.release()].filter(Boolean).join(" ") || null,
-          architecture: os2.arch() || null,
-          uptimeSeconds: Math.floor(os2.uptime()),
+          hostName: os4.hostname() || null,
+          operatingSystem: [deps.platform === "win32" ? "Windows" : deps.platform === "darwin" ? "macOS" : os4.type(), os4.release()].filter(Boolean).join(" ") || null,
+          architecture: os4.arch() || null,
+          uptimeSeconds: Math.floor(os4.uptime()),
           details: computerInfo
         }
       },
@@ -1026,15 +2043,137 @@ var createSampler = (deps) => {
       memory: memory.value,
       gpus: gpu.value,
       disks: disks.value,
-      history: { cpu: [...cpuHistory], gpu: [...gpuHistory] },
-      warnings: evaluateWarnings({
-        cpu: cpu.value,
-        memory: memory.value,
-        disks: disks.value,
-        cpuHistory,
-        gpuHistory
-      })
+      diskActivity: diskActivity.value,
+      network: network.value,
+      processes: processes.value,
+      battery: battery.value,
+      sensors: sensors.value,
+      history: {
+        cpu: cpuHistory.values(),
+        gpu: gpuHistory.values(),
+        memory: memoryHistory.values(),
+        networkDown: networkDownHistory.values(),
+        networkUp: networkUpHistory.values(),
+        sampleIntervalMs: historyIntervalMs || SAMPLE_INTERVAL_MS
+      },
+      warnings,
+      health: { state: "healthy", warningCount: 0, criticalCount: 0, unavailableCount: 0 }
     };
+    snapshot = { ...nextSnapshot, health: evaluateHealth(nextSnapshot) };
+  };
+  const launchSource = (current, key, source, read, enabled) => {
+    if (inFlight.get(key) === current)
+      return;
+    inFlight.set(key, current);
+    safely(read).then((result) => {
+      if (current !== generation)
+        return;
+      const settledAt = deps.now();
+      if (enabled?.() === false) {
+        source.value = unavailable("disabled");
+        source.lastGood = null;
+        source.failures = 0;
+        source.retryAt = 0;
+      } else {
+        settle(source, result, settledAt);
+      }
+      publish(settledAt, false);
+    }).finally(() => {
+      if (inFlight.get(key) === current)
+        inFlight.delete(key);
+    });
+  };
+  const tick = async (current) => {
+    const now = deps.now();
+    if (snapshot === null && networkDueAt === 0) {
+      networkDueAt = now + 2500;
+      diskActivityDueAt = now + 3000;
+      processesDueAt = now + 5000;
+      sensorsDueAt = now + 5000;
+      batteryDueAt = now + 1e4;
+    }
+    const settings = deps.settings?.() ?? DEFAULT_MONITOR_SETTINGS;
+    const cpuResult = due(cpu, now) ? await safely(deps.cpuMem.cpu) : null;
+    if (current !== generation)
+      return;
+    const settledAt = deps.now();
+    if (cpuResult)
+      settle(cpu, cpuResult, settledAt);
+    if (due(memory, now))
+      launchSource(current, "memory", memory, deps.cpuMem.memory);
+    if (due(gpu, now))
+      launchSource(current, "gpu", gpu, deps.gpu.read);
+    if (due(disks, now) && now >= disksDueAt) {
+      disksDueAt = now + DISK_INTERVAL_MS;
+      launchSource(current, "disks", disks, async () => {
+        const result = await deps.disks();
+        return Array.isArray(result) ? { status: "ok", items: result, sampledAt: deps.now() } : result;
+      });
+    }
+    if (deps.computerInfo && now >= computerInfoDueAt && inFlight.get("computerInfo") !== current) {
+      computerInfoDueAt = now + COMPUTER_INFO_INTERVAL_MS;
+      inFlight.set("computerInfo", current);
+      safely(deps.computerInfo).then((result) => {
+        if (current !== generation)
+          return;
+        computerInfo = "status" in result ? null : result;
+        publish(deps.now(), false);
+      }).finally(() => {
+        if (inFlight.get("computerInfo") === current)
+          inFlight.delete("computerInfo");
+      });
+    }
+    if (deps.network && !settings.modules.network) {
+      network.value = unavailable("disabled");
+      network.lastGood = null;
+      network.failures = 0;
+      network.retryAt = 0;
+      previousNetwork = null;
+    } else if (deps.network && due(network, now) && now >= networkDueAt) {
+      networkDueAt = now + NETWORK_INTERVAL_MS;
+      launchSource(current, "network", network, async () => {
+        const result = await deps.network();
+        if (result.status !== "ok")
+          return result;
+        const at = deps.now();
+        const elapsed = previousNetwork ? at - previousNetwork.sampledAt : 0;
+        const sampled = { ...result, interfaces: deriveNetworkRates(result.interfaces, previousNetwork?.interfaces ?? null, elapsed), sampledAt: at };
+        previousNetwork = sampled;
+        return sampled;
+      }, () => (deps.settings?.() ?? DEFAULT_MONITOR_SETTINGS).modules.network);
+    }
+    if (deps.processes && !settings.modules.processes) {
+      processes.value = unavailable("disabled");
+      processes.lastGood = null;
+      processes.failures = 0;
+      processes.retryAt = 0;
+    } else if (deps.processes && due(processes, now) && now >= processesDueAt) {
+      processesDueAt = now + PROCESS_INTERVAL_MS;
+      launchSource(current, "processes", processes, () => deps.processes(settings.processLimit), () => (deps.settings?.() ?? DEFAULT_MONITOR_SETTINGS).modules.processes);
+    }
+    if (deps.battery && !settings.modules.battery) {
+      battery.value = unavailable("disabled");
+      battery.lastGood = null;
+      battery.failures = 0;
+      battery.retryAt = 0;
+    } else if (deps.battery && due(battery, now) && now >= batteryDueAt) {
+      batteryDueAt = now + BATTERY_INTERVAL_MS;
+      launchSource(current, "battery", battery, deps.battery, () => (deps.settings?.() ?? DEFAULT_MONITOR_SETTINGS).modules.battery);
+    }
+    if (deps.sensors && !settings.modules.sensors) {
+      sensors.value = unavailable("disabled");
+      sensors.lastGood = null;
+      sensors.failures = 0;
+      sensors.retryAt = 0;
+    } else if (deps.sensors && due(sensors, now) && now >= sensorsDueAt) {
+      sensorsDueAt = now + SENSOR_INTERVAL_MS;
+      launchSource(current, "sensors", sensors, deps.sensors, () => (deps.settings?.() ?? DEFAULT_MONITOR_SETTINGS).modules.sensors);
+    }
+    if (deps.diskActivity && due(diskActivity, now) && now >= diskActivityDueAt) {
+      diskActivityDueAt = now + DISK_ACTIVITY_INTERVAL_MS;
+      launchSource(current, "diskActivity", diskActivity, deps.diskActivity);
+    }
+    publish(settledAt, true);
   };
   const loop = (current) => {
     cancelTimer = deps.schedule(() => {
@@ -1052,6 +2191,8 @@ var createSampler = (deps) => {
     }, SAMPLE_INTERVAL_MS);
   };
   const start = () => {
+    if (paused)
+      return Promise.resolve();
     active = true;
     const current = generation;
     return (async () => {
@@ -1069,6 +2210,8 @@ var createSampler = (deps) => {
   return {
     stats: async () => {
       lastRequest = deps.now();
+      if (paused && snapshot)
+        return snapshot;
       if (!active)
         first = start();
       if (first)
@@ -1078,6 +2221,8 @@ var createSampler = (deps) => {
       return snapshot;
     },
     stop,
+    pause,
+    resume,
     running: () => active
   };
 };
@@ -1092,6 +2237,9 @@ if (!port || !token) {
 var platform = currentPlatform();
 var container = await detectContainer(platform);
 var now = () => Date.now();
+var settings = structuredClone(DEFAULT_MONITOR_SETTINGS);
+var processCollector = createProcessCollector(platform, now);
+var diskActivity = createDiskActivityCollector(platform, now);
 var sampler = createSampler({
   now,
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -1104,12 +2252,44 @@ var sampler = createSampler({
   cpuMem: createCpuMemCollector(platform, container, now),
   gpu: createGpuCollector(platform),
   disks: () => readDisks(platform, container),
-  computerInfo: () => readComputerInfo(platform)
+  diskActivity,
+  computerInfo: () => readComputerInfo(platform),
+  network: () => readNetwork(platform, now()),
+  processes: (limit) => processCollector.read(limit),
+  battery: () => readBattery(platform),
+  sensors: () => readSensors(platform),
+  settings: () => settings
 });
 var send = (res, status, body) => {
   res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
   res.end(JSON.stringify(body));
 };
+var readJsonBody = (req) => new Promise((resolve) => {
+  const chunks = [];
+  let size = 0;
+  let failed = false;
+  req.on("data", (chunk) => {
+    if (failed)
+      return;
+    size += chunk.length;
+    if (size > 16384) {
+      failed = true;
+      resolve(null);
+      return;
+    }
+    chunks.push(chunk);
+  });
+  req.on("end", () => {
+    if (failed)
+      return;
+    try {
+      resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+    } catch {
+      resolve(null);
+    }
+  });
+  req.on("error", () => resolve(null));
+});
 var server = http.createServer((req, res) => {
   if (req.headers.authorization !== `Bearer ${token}`) {
     send(res, 401, { error: "unauthorized" });
@@ -1124,8 +2304,25 @@ var server = http.createServer((req, res) => {
     sampler.stats().then((stats) => send(res, 200, stats), () => send(res, 503, { error: "not-ready" }));
     return;
   }
+  if (pathname === "/settings" && req.method === "POST") {
+    readJsonBody(req).then((value) => {
+      if (value === null) {
+        send(res, 400, { error: "invalid-settings" });
+        return;
+      }
+      const next = normalizeMonitorSettings(value);
+      const wasPaused = settings.paused;
+      settings = next;
+      if (next.paused && !wasPaused)
+        sampler.pause();
+      else if (!next.paused && wasPaused)
+        sampler.resume();
+      send(res, 200, { ok: true });
+    });
+    return;
+  }
   if (pathname === "/open-storage-settings" && req.method === "POST" && platform === "win32") {
-    runPowerShell("Start-Process 'ms-settings:storagesense'", 5000).then((result) => send(res, result.ok ? 200 : 500, { opened: result.ok }));
+    runPowerShell("Start-Process 'ms-settings:storage'", 5000).then((result) => send(res, result.ok ? 200 : 500, { opened: result.ok }));
     return;
   }
   send(res, 404, { error: "not-found" });

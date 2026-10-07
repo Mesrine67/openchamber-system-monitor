@@ -29,6 +29,8 @@ const errorCode = (error: unknown): string | null => {
 export type Poller = {
   /** Asks now, e.g. after Retry or when the frame becomes visible. */
   poll: () => void;
+  /** Changes the delay after the current request completes. */
+  setInterval: (ms: number) => void;
   dispose: () => void;
 };
 
@@ -40,6 +42,7 @@ export const createPoller = (deps: PollerDeps): Poller => {
   let shownAt = 0;
   let blocked = false;
   let cancel: (() => void) | null = null;
+  let intervalMs = SAMPLE_INTERVAL_MS;
 
   const next = (ms: number) => {
     cancel?.();
@@ -84,7 +87,7 @@ export const createPoller = (deps: PollerDeps): Poller => {
           blocked = false;
           deps.onState({ kind: 'ready', stats });
         }
-        next(SAMPLE_INTERVAL_MS);
+        next(intervalMs);
       },
       (error: unknown) => {
         inFlight = false;
@@ -110,6 +113,7 @@ export const createPoller = (deps: PollerDeps): Poller => {
       cancel = null;
       poll();
     },
+    setInterval: (ms) => { if (Number.isFinite(ms) && ms >= 500 && ms <= 30_000) intervalMs = Math.round(ms); },
     dispose: () => {
       disposed = true;
       cancel?.();

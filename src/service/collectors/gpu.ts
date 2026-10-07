@@ -5,7 +5,8 @@ import { readText, run } from './exec.ts';
 import { parseAmdCards, parseIoreg, parseNvidiaSmi, parseWindowsGpu, type AmdCard } from './parse-gpu.ts';
 import { createGpuLoop, NVIDIA_SMI_WIN32 } from './windows.ts';
 
-const NVIDIA_ARGS = ['--query-gpu=name,utilization.gpu,memory.used,memory.total', '--format=csv,noheader,nounits'];
+const NVIDIA_ARGS = ['--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,clocks.gr,power.draw,fan.speed,driver_version', '--format=csv,noheader,nounits'];
+const NVIDIA_BASIC_ARGS = ['--query-gpu=name,utilization.gpu,memory.used,memory.total', '--format=csv,noheader,nounits'];
 const WINDOWS_FIRST_SAMPLE_MS = 8_000;
 
 export type GpuCollector = {
@@ -21,8 +22,12 @@ type NvidiaResult = { devices: GpuDevice[] } | { missing: boolean };
 
 const readNvidia = async (commands: string[]): Promise<NvidiaResult> => {
   const result = await run(commands, NVIDIA_ARGS);
-  if (!result.ok) return { missing: result.missing };
-  return { devices: parseNvidiaSmi(result.stdout) };
+  if (result.ok) return { devices: parseNvidiaSmi(result.stdout) };
+  if (result.missing) return { missing: true };
+  // Older drivers/GPU models may not expose one optional sensor field.
+  const basic = await run(commands, NVIDIA_BASIC_ARGS);
+  if (!basic.ok) return { missing: basic.missing };
+  return { devices: parseNvidiaSmi(basic.stdout) };
 };
 
 const readAmdCards = async (): Promise<AmdCard[]> => {

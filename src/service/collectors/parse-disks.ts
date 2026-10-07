@@ -77,7 +77,7 @@ export const linuxDisks = (rows: DfRow[], container: boolean): Disk[] => {
     }
   }
   return [...byFigures.values()]
-    .map((row) => ({ mount: row.mount, label: null, used: row.used, total: row.used + row.available }))
+    .map((row) => ({ mount: row.mount, label: null, used: row.used, total: row.used + row.available, device: row.filesystem }))
     .sort(byMount);
 };
 
@@ -105,6 +105,7 @@ export const parseWindowsDisks = (text: string): Disk[] | null => {
       label: typeof label === 'string' && label.trim() ? label.trim() : null,
       used: size - free,
       total: size,
+      device: mount,
       ...(typeof fileSystem === 'string' && fileSystem.trim() ? { fileSystem: fileSystem.trim() } : {}),
       ...(driveType === 2 ? { driveType: 'removable' as const } : driveType === 3 ? { driveType: 'fixed' as const } : {}),
     });

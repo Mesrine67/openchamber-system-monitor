@@ -44,13 +44,16 @@ const fail = (message) => {
   process.exit(1);
 };
 
-const get = async (path, auth = true) => {
+const request = async (path, { method = 'GET', body, auth = true } = {}) => {
   const response = await fetch(`http://127.0.0.1:${port}${path}`, {
-    headers: auth ? { authorization: `Bearer ${token}` } : {},
+    method,
+    headers: { ...(auth ? { authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    body,
     signal: AbortSignal.timeout(20_000),
   });
   return { status: response.status, body: await response.json() };
 };
+const get = (path, auth = true) => request(path, { auth });
 
 const deadline = Date.now() + 15_000;
 for (;;) {
@@ -64,23 +67,68 @@ for (;;) {
 }
 
 if ((await get('/stats', false)).status !== 401) fail('/stats answered without the token');
+if ((await request('/settings', { method: 'POST', body: '{}', auth: false })).status !== 401) fail('/settings answered without the token');
 
 const first = await get('/stats');
 if (first.status !== 200) fail(`/stats answered ${first.status}`);
-// A second reading after one tick also exercises the history.
-await new Promise((resolve) => setTimeout(resolve, 2_500));
-const { body: stats } = await get('/stats');
+// Wait for another completed tick; Windows' one-time collectors can make a
+// sampling turn longer than the nominal 2-second timer interval.
+let stats = first.body;
+for (let attempt = 0; attempt < 20 && stats.history?.cpu?.length < 2; attempt += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  const next = await get('/stats');
+  if (next.status !== 200) fail(`/stats answered ${next.status}`);
+  stats = next.body;
+}
+if (stats.history.cpu.length < 2) fail('history did not grow after completed sampling ticks');
+
+const updated = await request('/settings', {
+  method: 'POST',
+  body: JSON.stringify({ paused: false, refreshSeconds: 5, historyMinutes: 30, processLimit: 5, modules: { network: true, processes: true, battery: true, sensors: true } }),
+});
+if (updated.status !== 200 || updated.body.ok !== true) fail('/settings rejected valid bounded settings');
+let configured;
+for (let attempt = 0; attempt < 30; attempt += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  configured = await get('/stats');
+  if (configured.status === 200 && configured.body.history.sampleIntervalMs === 30_000) break;
+}
+if (configured?.status !== 200 || configured.body.history.sampleIntervalMs !== 30_000) {
+  fail(`history window did not apply to sampler (interval ${configured?.body?.history?.sampleIntervalMs ?? 'unavailable'})`);
+}
+
+// Let staggered collectors reach their first result. Optional sources may
+// legitimately be unsupported, but must not remain in the initial pending state.
+const optionalKeys = ['network', 'processes', 'battery', 'sensors', 'diskActivity'];
+for (let attempt = 0; attempt < 16; attempt += 1) {
+  const pending = optionalKeys.some((key) => stats[key].status === 'unavailable' && stats[key].reason === 'pending');
+  if (!pending) break;
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  const next = await get('/stats');
+  if (next.status !== 200) fail(`/stats answered ${next.status}`);
+  stats = next.body;
+}
+if (optionalKeys.some((key) => stats[key].status === 'unavailable' && stats[key].reason === 'pending')) {
+  fail('one or more optional collectors remained pending after their startup window');
+}
 
 const summary = {
   runtime,
-  environment: stats.environment,
+  environment: {
+    platform: stats.environment.platform,
+    container: stats.environment.container,
+    operatingSystem: stats.environment.computer?.operatingSystem ?? null,
+    architecture: stats.environment.computer?.architecture ?? null,
+  },
   cpu: stats.cpu.status === 'ok'
     ? { total: Math.round(stats.cpu.total), cores: stats.cpu.cores, perCore: stats.cpu.perCore.length, load: stats.cpu.load, limitCores: stats.cpu.limitCores }
     : stats.cpu,
-  memory: stats.memory,
-  gpus: stats.gpus,
-  disks: stats.disks,
+  memory: stats.memory.status === 'ok' ? { totalBytes: stats.memory.total, usedBytes: stats.memory.used, swapAvailable: stats.memory.swapTotal !== null } : stats.memory,
+  gpus: stats.gpus.status === 'ok' ? { count: stats.gpus.devices.length } : stats.gpus,
+  disks: stats.disks.status === 'ok' ? { count: stats.disks.items.length } : stats.disks,
+  optionalSources: Object.fromEntries(optionalKeys.map((key) => [key, stats[key].status === 'ok' ? 'ok' : `${stats[key].reason}${stats[key].tool ? ` (${stats[key].tool})` : ''}`])),
   history: { cpu: stats.history.cpu.length, gpu: stats.history.gpu.length },
+  configuredHistory: { points: configured.body.history.cpu.length, intervalMs: configured.body.history.sampleIntervalMs },
   warnings: stats.warnings,
 };
 console.log(JSON.stringify(summary, null, 2));
@@ -90,7 +138,6 @@ for (const key of ['cpu', 'memory', 'disks']) {
 }
 if (!['ok', 'unavailable'].includes(stats.gpus.status)) fail('gpus has no status');
 if (stats.disks.items.length === 0) fail('no disks reported');
-if (stats.history.cpu.length < 2) fail('history did not grow');
 if (stats.memory.used <= 0 || stats.memory.used > stats.memory.total) fail('memory values are implausible');
 if (process.env.EXPECT_CONTAINER && stats.environment.container !== (process.env.EXPECT_CONTAINER === '1')) {
   fail(`container is ${stats.environment.container}`);

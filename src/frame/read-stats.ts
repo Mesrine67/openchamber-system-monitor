@@ -26,14 +26,25 @@ export const isStats = (value: unknown): value is Stats => {
   const history = field(value, 'history');
   return isObject(environment)
     && typeof field(environment, 'container') === 'boolean'
-    && ['cpu', 'memory', 'gpus', 'disks'].every((key) => isSource(field(value, key)))
+    && ['cpu', 'memory', 'gpus', 'disks', 'diskActivity', 'network', 'processes', 'battery', 'sensors'].every((key) => isSource(field(value, key)))
     && hasArray(field(value, 'cpu'), 'perCore')
     && hasArray(field(value, 'gpus'), 'devices')
     && hasArray(field(value, 'disks'), 'items')
+    && hasArray(field(value, 'diskActivity'), 'items')
+    && hasArray(field(value, 'network'), 'interfaces')
+    && hasArray(field(value, 'processes'), 'topCpu')
+    && hasArray(field(value, 'processes'), 'topMemory')
+    && hasArray(field(value, 'sensors'), 'readings')
     && isObject(history)
     && isSeries(field(history, 'cpu'))
     && isSeries(field(history, 'gpu'))
-    && Array.isArray(field(value, 'warnings'));
+    && isSeries(field(history, 'memory'))
+    && isSeries(field(history, 'networkDown'))
+    && isSeries(field(history, 'networkUp'))
+    && typeof field(history, 'sampleIntervalMs') === 'number'
+    && Array.isArray(field(value, 'warnings'))
+    && isObject(field(value, 'health'))
+    && ['healthy', 'attention', 'critical', 'unavailable'].includes(String(field(field(value, 'health') as object, 'state')));
 };
 
 export const readStats = (body: string): Stats | null => {

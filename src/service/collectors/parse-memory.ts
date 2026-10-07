@@ -65,7 +65,10 @@ export const parseWindowsPageFile = (text: string): { total: number; used: numbe
   return total > 0 ? { total, used: Math.min(used, total) } : null;
 };
 
-export type Meminfo = { total: number; available: number; swapTotal: number; swapFree: number };
+export type Meminfo = {
+  total: number; available: number; swapTotal: number; swapFree: number;
+  cached: number | null; committed: number | null; commitLimit: number | null;
+};
 
 /** Linux `/proc/meminfo`, values in kB. */
 export const parseMeminfo = (text: string): Meminfo | null => {
@@ -78,7 +81,18 @@ export const parseMeminfo = (text: string): Meminfo | null => {
     available: available * KIB,
     swapTotal: (read('SwapTotal') ?? 0) * KIB,
     swapFree: (read('SwapFree') ?? 0) * KIB,
+    cached: read('Cached') === null ? null : (read('Cached') ?? 0) * KIB,
+    committed: read('Committed_AS') === null ? null : (read('Committed_AS') ?? 0) * KIB,
+    commitLimit: read('CommitLimit') === null ? null : (read('CommitLimit') ?? 0) * KIB,
   };
+};
+
+/** Linux PSI memory stall percentage. No value when the kernel omits PSI. */
+export const parseMemoryPressure = (text: string): 'low' | 'medium' | 'high' | null => {
+  const match = /^some\s+.*?avg10=(\d+(?:\.\d+)?)/m.exec(text);
+  const percent = match?.[1] ? Number(match[1]) : NaN;
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) return null;
+  return percent >= 10 ? 'high' : percent >= 1 ? 'medium' : 'low';
 };
 
 /**
@@ -101,5 +115,5 @@ export const parseCgroupMemory = (input: {
   const inactive = input.stat
     ? field(input.stat, /^(?:total_)?inactive_file (\d+)$/m) ?? 0
     : 0;
-  return { used: Math.max(0, usage - inactive), total: limit };
+  return { used: Math.min(limit, Math.max(0, usage - inactive)), total: limit };
 };

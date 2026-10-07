@@ -4,13 +4,14 @@ OpenChamber extension (SDK `@openchamber/sdk`, manifest in `package.json` → `o
 
 ## Layout
 
-- `src/shared/stats.ts`: the `/stats` contract, limits and thresholds. Both sides import it.
-- `src/service/`: the service. `main.ts` (HTTP on 127.0.0.1, token check), `sampler.ts` (2 s tick, 30 s idle stop, history, failure policy), `warnings.ts`, `env.ts` (platform, container).
-- `src/service/collectors/parse-*.ts`: **pure** parsers, text in, typed values out. `cpu-mem.ts`, `gpu.ts`, `disks.ts`, `windows.ts` run the tools and call the parsers.
-- `src/frame/`: shared frame code: host wiring, poller, `/stats` boundary check, formatting, UI helpers.
-- `src/panel/`, `src/status/`: the rail panel and the Work Status section.
-- `src/i18n/messages.ts`: all 13 OpenChamber locales.
-- `test/`: `bun test`; `test/fixtures/` holds real tool output.
+- `src/shared/stats.ts`: the `/stats` contract, settings bounds, thresholds and history limits. Both sides import it; `src/shared/health.ts` owns the shared health calculation.
+- `src/service/`: authenticated localhost service, staggered sampler, validated settings endpoint, warnings and OS/container detection.
+- `src/service/collectors/parse-*.ts`: **pure** parsers, text in, typed values out. Platform collectors gather CPU/memory/GPU, storage/activity, network, processes, battery, sensors and static hardware.
+- `src/frame/`: shared frame code: host wiring, poller, `/stats` boundary check, formatting, sparklines and UI helpers.
+- `src/panel/`: rail summary, diagnostic tabs, Settings and the responsive full-page entry.
+- `src/status/`: compact Work Status section; do not turn it into the full dashboard.
+- `src/i18n/messages.ts` and `src/i18n/monitor.ts`: host labels and System Monitor labels across the OpenChamber locale set.
+- `test/`: `bun test`; `test/fixtures/` holds sanitized tool output for all supported platform parsers.
 - `scripts/build.ts` builds `dist/`; `scripts/smoke.mjs` starts the built service and checks a live answer; `scripts/preview.ts` hosts both frames in a browser.
 
 ## Commands
@@ -22,17 +23,17 @@ SMOKE_RUNTIME=bun node scripts/smoke.mjs
 bun run preview            # frames in a browser via a stand-in host (scripts/preview.ts)
 ```
 
-The preview only polls while its tab is visible, like inside OpenChamber.
+The preview only polls while its tab is visible, like inside OpenChamber. Its page-mode button simulates the host Extension pages menu because the SDK cannot open contributed pages through `openSurface`.
 
 ## Rules
 
 - A missing value is `null` or `unavailable`, never 0. A parser that cannot read its input returns `null`.
-- Every new source gets a pure parser and a fixture with real output. Strip serial numbers and other identifiers from fixtures.
+- Every new source gets a pure parser and a sanitized fixture with representative OS output. Strip hostnames, usernames, serial numbers, personal paths, and other identifiers from fixtures.
 - Collectors never throw into the sampler; one failing source must not hide the others.
 - The service runs with a minimal environment (PATH, HOME, temp, locale, Windows system variables). Call system tools by absolute path first, then the bare name. Windows PowerShell hangs when `PSModulePath` is unset or only the system folder, so always start it through `powerShellEnv()` (it sets it empty); `scripts/smoke.mjs` uses the exact variable list OpenChamber passes.
-- Frames are classic IIFE bundles in a sandboxed iframe: no network, no ESM, no Node APIs. Talk to the service only through `host.serviceRequest`.
+- Frames are classic IIFE bundles in a sandboxed iframe: no network, no ESM, no Node APIs. Talk to the service only through `host.serviceRequest`; persist extension preferences with `host.storage`.
 - Style with the host theme variables (`--oc-*`) and keep `color-scheme` following `data-oc-theme`; without it a dark host paints the iframe white.
-- New UI text goes into all 13 locales with the same placeholders; `test/frame.test.ts` enforces it.
+- New UI text goes into `src/i18n/monitor.ts` for the supported locale set; avoid hard-coded labels in panel/status views. Keep placeholders consistent and cover locale completeness in tests.
 - Run `bun run build` after every source change and commit `dist/` with it. CI fails when `dist/` is stale.
 - No runtime dependencies besides `@openchamber/sdk`, which is bundled.
 - Thresholds live in `src/shared/stats.ts`; do not duplicate them.
