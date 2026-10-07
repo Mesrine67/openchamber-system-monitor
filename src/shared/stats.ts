@@ -66,7 +66,9 @@ export type ComputerInfo = {
   firmware: string | null;
   osName: string | null;
   osVersion: string | null;
+  osDisplayVersion: string | null;
   osBuild: string | null;
+  displayAdapters: string[];
   physicalCores: number | null;
   logicalProcessors: number | null;
   cpuMaxMHz: number | null;

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5
+
+- Show Windows display adapter names and driver versions, plus the Windows display release (such as 24H2) when available.
+
 ## 1.0.4
 
 - Add Windows CPU topology, OS build, firmware, computer model, RAM module speed and uptime details.

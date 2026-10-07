@@ -8,13 +8,17 @@ $os = Get-CimInstance Win32_OperatingSystem
 $bios = Get-CimInstance Win32_BIOS
 $cpu = @(Get-CimInstance Win32_Processor | Select-Object NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed)
 $ram = @(Get-CimInstance Win32_PhysicalMemory | Select-Object Speed)
+$gpu = @(Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion)
+$displayVersion = (Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion' -ErrorAction SilentlyContinue).DisplayVersion
 @{
   manufacturer = $cs.Manufacturer
   model = $cs.Model
   firmware = $bios.SMBIOSBIOSVersion
   osName = $os.Caption
   osVersion = $os.Version
+  osDisplayVersion = $displayVersion
   osBuild = $os.BuildNumber
+  displayAdapters = @($gpu | ForEach-Object { if ($_.Name) { if ($_.DriverVersion) { "$($_.Name) · $($_.DriverVersion)" } else { $_.Name } } })
   physicalCores = [int](($cpu | Measure-Object NumberOfCores -Sum).Sum)
   logicalProcessors = [int](($cpu | Measure-Object NumberOfLogicalProcessors -Sum).Sum)
   cpuMaxMHz = [int](($cpu | Measure-Object MaxClockSpeed -Maximum).Maximum)
@@ -49,7 +53,11 @@ export const parseComputerInfo = (text: string): ComputerInfo | null => {
     firmware: stringOrNull(read('firmware')),
     osName: stringOrNull(read('osName')),
     osVersion: stringOrNull(read('osVersion')),
+    osDisplayVersion: stringOrNull(read('osDisplayVersion')),
     osBuild: stringOrNull(read('osBuild')),
+    displayAdapters: Array.isArray(read('displayAdapters'))
+      ? (read('displayAdapters') as unknown[]).filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : [],
     physicalCores: numberOrNull(read('physicalCores')),
     logicalProcessors: numberOrNull(read('logicalProcessors')),
     cpuMaxMHz: numberOrNull(read('cpuMaxMHz')),

@@ -232,12 +232,14 @@ const computerSection = (computer: NonNullable<Stats['environment']['computer']>
   addRow(t.hostName, computer.hostName);
   const osDetails = [
     details?.osName ?? computer.operatingSystem,
+    details?.osDisplayVersion,
     details?.osVersion,
     details?.osBuild ? format(t.build, { n: details.osBuild }) : null,
   ].filter(Boolean).join(' · ');
   addRow(t.operatingSystem, osDetails || null);
   addRow(t.architecture, computer.architecture);
   if (details?.firmware) addRow(t.firmware, details.firmware);
+  if (details?.displayAdapters.length) addRow(t.displayAdapters, details.displayAdapters.join(' · '));
   if (computer.uptimeSeconds !== undefined && computer.uptimeSeconds !== null) {
     const days = Math.floor(computer.uptimeSeconds / 86400);
     const hours = Math.floor((computer.uptimeSeconds % 86400) / 3600);
