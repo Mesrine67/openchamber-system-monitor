@@ -61,6 +61,8 @@ jobs:
 
       - run: bun install --frozen-lockfile
       - run: bun run check
+      - name: Verify committed extension bundles
+        run: git diff --exit-code -- dist
 
       - name: Create GitHub Release
         env:

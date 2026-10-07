@@ -423,14 +423,14 @@ var createCpuMemCollector = (platform, container, now) => {
         const [vm, swapUsage] = await Promise.all([run(["/usr/bin/vm_stat", "vm_stat"], []), readSwap()]);
         if (!vm.ok)
           return unavailable(vm.missing ? "tool-missing" : "failed", "vm_stat");
-        const used2 = parseVmStat(vm.stdout);
-        if (used2 === null)
+        const used = parseVmStat(vm.stdout);
+        if (used === null)
           return unavailable("failed");
         return {
           status: "ok",
-          used: used2,
+          used,
           total: os.totalmem(),
-          available: Math.max(0, os.totalmem() - used2),
+          available: Math.max(0, os.totalmem() - used),
           swapUsed: swapUsage && swapUsage.total > 0 ? swapUsage.used : null,
           swapTotal: swapUsage && swapUsage.total > 0 ? swapUsage.total : null
         };
@@ -981,14 +981,14 @@ var createSampler = (deps) => {
   };
   const tick = async (current) => {
     const now = deps.now();
-    const readDisks2 = due(disks, now) && now >= disksDueAt;
-    const readComputerInfo2 = deps.computerInfo !== undefined && now >= computerInfoDueAt;
+    const readDisks = due(disks, now) && now >= disksDueAt;
+    const readComputerInfo = deps.computerInfo !== undefined && now >= computerInfoDueAt;
     const [cpuResult, memoryResult, gpuResult, diskResult, computerInfoResult] = await Promise.all([
       due(cpu, now) ? safely(deps.cpuMem.cpu) : null,
       due(memory, now) ? safely(deps.cpuMem.memory) : null,
       due(gpu, now) ? safely(deps.gpu.read) : null,
-      readDisks2 ? safely(deps.disks) : null,
-      readComputerInfo2 ? safely(deps.computerInfo) : null
+      readDisks ? safely(deps.disks) : null,
+      readComputerInfo ? safely(deps.computerInfo) : null
     ]);
     if (current !== generation)
       return;

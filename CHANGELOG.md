@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.6
+
+- Rebuild the committed extension bundles so the latest Windows system, storage and adapter details are included in Git installs.
+
 ## 1.0.5
 
 - Show Windows display adapter names and driver versions, plus the Windows display release (such as 24H2) when available.
