@@ -3,8 +3,10 @@
 import http from 'node:http';
 
 import { createCpuMemCollector } from './collectors/cpu-mem.ts';
+import { readComputerInfo } from './collectors/computer.ts';
 import { readDisks } from './collectors/disks.ts';
 import { createGpuCollector } from './collectors/gpu.ts';
+import { runPowerShell } from './collectors/windows.ts';
 import { currentPlatform, detectContainer } from './env.ts';
 import { createSampler } from './sampler.ts';
 
@@ -31,6 +33,7 @@ const sampler = createSampler({
   cpuMem: createCpuMemCollector(platform, container, now),
   gpu: createGpuCollector(platform),
   disks: () => readDisks(platform, container),
+  computerInfo: () => readComputerInfo(platform),
 });
 
 const send = (res: http.ServerResponse, status: number, body: object): void => {
@@ -52,6 +55,12 @@ const server = http.createServer((req, res) => {
     sampler.stats().then(
       (stats) => send(res, 200, stats),
       () => send(res, 503, { error: 'not-ready' }),
+    );
+    return;
+  }
+  if (pathname === '/open-storage-settings' && req.method === 'POST' && platform === 'win32') {
+    runPowerShell("Start-Process 'ms-settings:storagesense'", 5_000).then((result) =>
+      send(res, result.ok ? 200 : 500, { opened: result.ok }),
     );
     return;
   }

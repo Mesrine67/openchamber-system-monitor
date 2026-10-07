@@ -2,7 +2,8 @@ import os from 'node:os';
 
 import { unavailable, type CpuStats, type MemoryStats, type Platform, type Unavailable } from '../../shared/stats.ts';
 import { readText, run } from './exec.ts';
-import { parseCgroupMemory, parseMeminfo, parseSwapUsage, parseVmStat } from './parse-memory.ts';
+import { parseCgroupMemory, parseMeminfo, parseSwapUsage, parseVmStat, parseWindowsPageFile } from './parse-memory.ts';
+import { runPowerShell } from './windows.ts';
 import {
   cpuUsage,
   limitedCpuUsage,
@@ -15,6 +16,7 @@ import {
 const CGROUP = '/sys/fs/cgroup';
 /** Swap barely moves; asking `sysctl` every tick would cost a process start for nothing. */
 export const SWAP_INTERVAL_MS = 10_000;
+const WINDOWS_PAGEFILE_QUERY = 'Get-CimInstance Win32_PageFileUsage | Select-Object AllocatedBaseSize, CurrentUsage | ConvertTo-Json -Compress';
 
 const coreTimes = (): CoreTimes[] => os.cpus().map((cpu) => cpu.times);
 
@@ -59,6 +61,7 @@ export const createCpuMemCollector = (platform: Platform, container: boolean, no
   let previousTimes: CoreTimes[] = [];
   let previousCgroup: { usageUsec: number; at: number } | null = null;
   let swap: { value: { used: number; total: number } | null; at: number } | null = null;
+  let windowsPageFile: { value: { used: number; total: number } | null; at: number } | null = null;
 
   const readSwap = async (): Promise<{ used: number; total: number } | null> => {
     const at = now();
@@ -66,6 +69,15 @@ export const createCpuMemCollector = (platform: Platform, container: boolean, no
     const result = await run(['/usr/sbin/sysctl', 'sysctl'], ['vm.swapusage']);
     swap = { value: result.ok ? parseSwapUsage(result.stdout) : null, at };
     return swap.value;
+  };
+
+  const readWindowsPageFile = async (): Promise<{ used: number; total: number } | null> => {
+    const at = now();
+    if (windowsPageFile && at - windowsPageFile.at < SWAP_INTERVAL_MS) return windowsPageFile.value;
+    const result = await runPowerShell(WINDOWS_PAGEFILE_QUERY, 5_000);
+    const value = result.ok ? parseWindowsPageFile(result.stdout) : null;
+    windowsPageFile = { value, at };
+    return value;
   };
 
   const readCgroupBaseline = async () => {
@@ -113,7 +125,14 @@ export const createCpuMemCollector = (platform: Platform, container: boolean, no
     memory: async () => {
       if (container) {
         const limited = await readCgroupMemory();
-        if (limited) return { status: 'ok', used: limited.used, total: limited.total, swapUsed: null, swapTotal: null };
+        if (limited) return {
+          status: 'ok',
+          used: limited.used,
+          total: limited.total,
+          available: Math.max(0, limited.total - limited.used),
+          swapUsed: null,
+          swapTotal: null,
+        };
       }
       if (platform === 'linux') {
         const info = parseMeminfo(await readText('/proc/meminfo') ?? '');
@@ -122,6 +141,7 @@ export const createCpuMemCollector = (platform: Platform, container: boolean, no
           status: 'ok',
           used: info.total - info.available,
           total: info.total,
+          available: info.available,
           swapUsed: info.swapTotal > 0 ? info.swapTotal - info.swapFree : null,
           swapTotal: info.swapTotal > 0 ? info.swapTotal : null,
         };
@@ -135,13 +155,23 @@ export const createCpuMemCollector = (platform: Platform, container: boolean, no
           status: 'ok',
           used,
           total: os.totalmem(),
+          available: Math.max(0, os.totalmem() - used),
           swapUsed: swapUsage && swapUsage.total > 0 ? swapUsage.used : null,
           swapTotal: swapUsage && swapUsage.total > 0 ? swapUsage.total : null,
         };
       }
       // Windows (and anything else): Node's own numbers are correct there.
       const total = os.totalmem();
-      return { status: 'ok', used: total - os.freemem(), total, swapUsed: null, swapTotal: null };
+      const used = total - os.freemem();
+      const pageFile = platform === 'win32' ? await readWindowsPageFile() : null;
+      return {
+        status: 'ok',
+        used,
+        total,
+        available: total - used,
+        swapUsed: pageFile?.used ?? null,
+        swapTotal: pageFile?.total ?? null,
+      };
     },
   };
 };

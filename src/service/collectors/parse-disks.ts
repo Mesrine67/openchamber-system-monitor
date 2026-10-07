@@ -98,7 +98,16 @@ export const parseWindowsDisks = (text: string): Disk[] | null => {
     const size = Number(Reflect.get(row, 'Size'));
     const free = Number(Reflect.get(row, 'FreeSpace'));
     if (typeof mount !== 'string' || !Number.isFinite(size) || !Number.isFinite(free) || size <= 0) continue;
-    disks.push({ mount, label: typeof label === 'string' && label.trim() ? label.trim() : null, used: size - free, total: size });
+    const fileSystem = Reflect.get(row, 'FileSystem');
+    const driveType = Number(Reflect.get(row, 'DriveType'));
+    disks.push({
+      mount,
+      label: typeof label === 'string' && label.trim() ? label.trim() : null,
+      used: size - free,
+      total: size,
+      ...(typeof fileSystem === 'string' && fileSystem.trim() ? { fileSystem: fileSystem.trim() } : {}),
+      ...(driveType === 2 ? { driveType: 'removable' as const } : driveType === 3 ? { driveType: 'fixed' as const } : {}),
+    });
   }
   return disks.sort(byMount);
 };

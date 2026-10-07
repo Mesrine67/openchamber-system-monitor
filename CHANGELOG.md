@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4
+
+- Add Windows CPU topology, OS build, firmware, computer model, RAM module speed and uptime details.
+- Show available system memory, Windows pagefile usage, and GPU dedicated/shared memory budgets when reported by the driver.
+- Add filesystem, drive type and free-space details for detected Windows volumes.
+- Add a button to open Windows Storage settings and review cleanup recommendations without deleting files automatically.
+
 ## 1.0.3
 
 - Windows: include removable volumes alongside fixed disks.

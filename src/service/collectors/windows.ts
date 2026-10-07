@@ -35,7 +35,7 @@ $ErrorActionPreference = 'SilentlyContinue'
 while ($true) {
   if (-not (Get-Process -Id ${parentPid} -ErrorAction SilentlyContinue)) { exit }
   $e = @(Get-CimInstance -ClassName Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -Filter "Name LIKE '%engtype_3D'" | Select-Object Name, UtilizationPercentage)
-  $m = @(Get-CimInstance -ClassName Win32_PerfFormattedData_GPUPerformanceCounters_GPUAdapterMemory | Select-Object Name, DedicatedUsage)
+  $m = @(Get-CimInstance -ClassName Win32_PerfFormattedData_GPUPerformanceCounters_GPUAdapterMemory | Select-Object Name, DedicatedUsage, DedicatedLimit, SharedUsage, SharedLimit)
   [Console]::Out.WriteLine((@{ engines = $e; memory = $m } | ConvertTo-Json -Compress -Depth 3))
   [Console]::Out.Flush()
   Start-Sleep -Seconds 2

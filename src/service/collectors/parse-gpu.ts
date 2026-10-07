@@ -114,21 +114,33 @@ export const parseWindowsGpu = (line: string): GpuDevice[] | null => {
     LUID.exec(toName(record(value, 'Name')) ?? '')?.[1]?.toLowerCase() ?? null;
 
   // Only adapters with a 3D engine count as GPUs; memory rows attach to them.
-  const adapters = new Map<string, { utilization: number; memUsed: number | null }>();
+  const adapters = new Map<string, {
+    utilization: number;
+    memUsed: number | null;
+    memBudget: number | null;
+    sharedMemUsed: number | null;
+    sharedMemTotal: number | null;
+  }>();
   for (const engine of asArray(record(parsed, 'engines'))) {
     const luid = luidOf(engine);
     const value = toNumber(record(engine, 'UtilizationPercentage'));
     if (!luid || value === null) continue;
-    const entry = adapters.get(luid) ?? { utilization: 0, memUsed: null };
+    const entry = adapters.get(luid) ?? { utilization: 0, memUsed: null, memBudget: null, sharedMemUsed: null, sharedMemTotal: null };
     entry.utilization += value;
     adapters.set(luid, entry);
   }
   for (const row of asArray(record(parsed, 'memory'))) {
     const luid = luidOf(row);
     const value = toNumber(record(row, 'DedicatedUsage'));
+    const budget = toNumber(record(row, 'DedicatedLimit'));
+    const sharedUsed = toNumber(record(row, 'SharedUsage'));
+    const sharedBudget = toNumber(record(row, 'SharedLimit'));
     const entry = luid ? adapters.get(luid) : undefined;
-    if (!entry || value === null) continue;
-    entry.memUsed = (entry.memUsed ?? 0) + value;
+    if (!entry) continue;
+    if (value !== null) entry.memUsed = (entry.memUsed ?? 0) + value;
+    if (budget !== null) entry.memBudget = (entry.memBudget ?? 0) + budget;
+    if (sharedUsed !== null) entry.sharedMemUsed = (entry.sharedMemUsed ?? 0) + sharedUsed;
+    if (sharedBudget !== null) entry.sharedMemTotal = (entry.sharedMemTotal ?? 0) + sharedBudget;
   }
   const devices = [...adapters.entries()].sort(([left], [right]) => left.localeCompare(right));
   return devices.map(([, entry], index) => ({
@@ -136,5 +148,8 @@ export const parseWindowsGpu = (line: string): GpuDevice[] | null => {
     utilization: percent(entry.utilization),
     memUsed: entry.memUsed,
     memTotal: null,
+    ...(entry.memBudget === null ? {} : { memBudget: entry.memBudget }),
+    ...(entry.sharedMemUsed === null ? {} : { sharedMemUsed: entry.sharedMemUsed }),
+    ...(entry.sharedMemTotal === null ? {} : { sharedMemTotal: entry.sharedMemTotal }),
   }));
 };

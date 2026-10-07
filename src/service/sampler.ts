@@ -10,6 +10,7 @@ import {
   SAMPLE_INTERVAL_MS,
   unavailable,
   type CpuStats,
+  type ComputerInfo,
   type Disk,
   type DiskStats,
   type GpuStats,
@@ -24,6 +25,7 @@ import { evaluateWarnings } from './warnings.ts';
 
 /** Delay between the CPU baseline and the first reading, so the first answer has real numbers. */
 export const PRIME_MS = 500;
+export const COMPUTER_INFO_INTERVAL_MS = 5 * 60_000;
 
 export type SamplerDeps = {
   now: () => number;
@@ -35,6 +37,7 @@ export type SamplerDeps = {
   cpuMem: CpuMemCollector;
   gpu: GpuCollector;
   disks: () => Promise<Disk[] | Unavailable>;
+  computerInfo?: () => Promise<ComputerInfo | Unavailable>;
 };
 
 type Source<T> = { value: T | Unavailable; lastGood: T | null; failures: number; retryAt: number };
@@ -101,6 +104,8 @@ export const createSampler = (deps: SamplerDeps): Sampler => {
   let gpu = freshSource<GpuStats>();
   let disks = freshSource<DiskStats>();
   let disksDueAt = 0;
+  let computerInfo: ComputerInfo | null = null;
+  let computerInfoDueAt = 0;
   let cpuHistory: (number | null)[] = [];
   let gpuHistory: (number | null)[] = [];
 
@@ -110,6 +115,8 @@ export const createSampler = (deps: SamplerDeps): Sampler => {
     gpu = freshSource();
     disks = freshSource();
     disksDueAt = 0;
+    computerInfo = null;
+    computerInfoDueAt = 0;
     cpuHistory = [];
     gpuHistory = [];
     snapshot = null;
@@ -128,11 +135,13 @@ export const createSampler = (deps: SamplerDeps): Sampler => {
   const tick = async (current: number) => {
     const now = deps.now();
     const readDisks = due(disks, now) && now >= disksDueAt;
-    const [cpuResult, memoryResult, gpuResult, diskResult] = await Promise.all([
+    const readComputerInfo = deps.computerInfo !== undefined && now >= computerInfoDueAt;
+    const [cpuResult, memoryResult, gpuResult, diskResult, computerInfoResult] = await Promise.all([
       due(cpu, now) ? safely(deps.cpuMem.cpu) : null,
       due(memory, now) ? safely(deps.cpuMem.memory) : null,
       due(gpu, now) ? safely(deps.gpu.read) : null,
       readDisks ? safely(deps.disks) : null,
+      readComputerInfo ? safely(deps.computerInfo!) : null,
     ]);
     if (current !== generation) return;
     const settledAt = deps.now();
@@ -142,6 +151,10 @@ export const createSampler = (deps: SamplerDeps): Sampler => {
     if (diskResult) {
       settle(disks, Array.isArray(diskResult) ? { status: 'ok', items: diskResult, sampledAt: settledAt } : diskResult, settledAt);
       disksDueAt = settledAt + DISK_INTERVAL_MS;
+    }
+    if (computerInfoResult) {
+      computerInfo = 'status' in computerInfoResult ? null : computerInfoResult;
+      computerInfoDueAt = settledAt + COMPUTER_INFO_INTERVAL_MS;
     }
 
     pushHistory(cpuHistory, cpu.value.status === 'ok' ? cpu.value.total : null);
@@ -157,6 +170,8 @@ export const createSampler = (deps: SamplerDeps): Sampler => {
             .filter(Boolean)
             .join(' ') || null,
           architecture: os.arch() || null,
+          uptimeSeconds: Math.floor(os.uptime()),
+          details: computerInfo,
         },
       },
       cpu: cpu.value,

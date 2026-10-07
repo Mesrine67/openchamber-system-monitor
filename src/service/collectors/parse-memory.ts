@@ -43,6 +43,28 @@ export const parseSwapUsage = (text: string): { used: number; total: number } | 
   return total === null || used === null ? null : { used, total };
 };
 
+/** Aggregate Windows Win32_PageFileUsage values (MiB) into byte totals. */
+export const parseWindowsPageFile = (text: string): { total: number; used: number } | null => {
+  let value: unknown;
+  try {
+    value = JSON.parse(text.trim() || 'null');
+  } catch {
+    return null;
+  }
+  const rows = Array.isArray(value) ? value : value === null ? [] : [value];
+  let total = 0;
+  let used = 0;
+  for (const row of rows) {
+    if (typeof row !== 'object' || row === null) continue;
+    const allocated = Number(Reflect.get(row, 'AllocatedBaseSize'));
+    const current = Number(Reflect.get(row, 'CurrentUsage'));
+    if (!Number.isFinite(allocated) || !Number.isFinite(current) || allocated < 0 || current < 0) continue;
+    total += allocated * MIB;
+    used += current * MIB;
+  }
+  return total > 0 ? { total, used: Math.min(used, total) } : null;
+};
+
 export type Meminfo = { total: number; available: number; swapTotal: number; swapFree: number };
 
 /** Linux `/proc/meminfo`, values in kB. */

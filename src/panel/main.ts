@@ -1,5 +1,5 @@
 // Rail panel: every value the service measures, with history and per-core bars.
-import { mountBadge, mountBanner, mountSpinner } from '@openchamber/sdk/ui';
+import { mountBadge, mountBanner, mountButton, mountSpinner } from '@openchamber/sdk/ui';
 
 import { format, type Messages } from '../i18n/messages.ts';
 import { blockedText } from '../frame/blocked.ts';
@@ -62,7 +62,12 @@ const warningText = (warning: Warning, stats: Stats, t: Messages): string => {
 };
 
 const cpuSection = (cpu: CpuStats | Unavailable, stats: Stats, t: Messages, locale: string): HTMLElement => {
-  const node = section(t.cpu, cpu.status === 'ok' ? cpu.model : null);
+  const computer = stats.environment.computer?.details;
+  const model = cpu.status === 'ok' ? cpu.model : null;
+  const frequency = computer?.cpuMaxMHz
+    ? ` · ${format(t.maxSpeed, { n: (computer.cpuMaxMHz / 1000).toLocaleString(locale, { maximumFractionDigits: 2 }) })}`
+    : '';
+  const node = section(t.cpu, model ? `${model}${frequency}` : null);
   if (cpu.status !== 'ok') {
     unavailableLine(node, cpu, t);
     return node;
@@ -78,6 +83,14 @@ const cpuSection = (cpu: CpuStats | Unavailable, stats: Stats, t: Messages, loca
     level: sustained ? 'warn' : null,
   });
   node.append(sparkline(stats.history.cpu, `${t.cpu} · ${t.history}`));
+  if (computer?.physicalCores || computer?.logicalProcessors) {
+    const details = element('div', 'caption');
+    details.textContent = [
+      computer.physicalCores ? format(t.physicalCores, { n: computer.physicalCores }) : null,
+      computer.logicalProcessors ? format(t.logicalProcessors, { n: computer.logicalProcessors }) : null,
+    ].filter(Boolean).join(' · ');
+    node.append(details);
+  }
   const caption = element('div', 'caption');
   caption.append(element('span', '', t.history));
   if (cpu.load) {
@@ -115,6 +128,9 @@ const memorySection = (memory: MemoryStats | Unavailable, t: Messages, locale: s
     value: format(t.usedOfTotal, { used: formatBytes(memory.used, locale), total: formatBytes(memory.total, locale) }),
     level: levelForPercent(percent),
   });
+  if (memory.available !== undefined) {
+    node.append(element('div', 'caption', `${t.availableMemory}: ${formatBytes(memory.available, locale)}`));
+  }
   if (memory.swapTotal !== null && memory.swapUsed !== null) {
     const swapPercent = memory.swapTotal > 0 ? (memory.swapUsed / memory.swapTotal) * 100 : 0;
     createMeter(node).update({
@@ -146,13 +162,23 @@ const gpuSection = (gpus: GpuStats | Unavailable, stats: Stats, t: Messages, loc
     if (device.memUsed !== null && device.memTotal !== null && device.memTotal > 0) {
       const percent = (device.memUsed / device.memTotal) * 100;
       createMeter(block).update({
-        label: t.memory,
+      label: t.dedicatedMemory,
         percent,
         value: format(t.usedOfTotal, { used: formatBytes(device.memUsed, locale), total: formatBytes(device.memTotal, locale) }),
         level: null,
       });
     } else if (device.memUsed !== null) {
-      block.append(element('div', 'caption', `${t.memory}: ${format(t.inUse, { used: formatBytes(device.memUsed, locale) })}`));
+      block.append(element('div', 'caption', `${t.dedicatedMemory}: ${format(t.inUse, { used: formatBytes(device.memUsed, locale) })}`));
+    }
+    if (device.memBudget !== null && device.memBudget !== undefined) {
+      block.append(element('div', 'caption', `${t.dedicatedMemory} · ${t.budget}: ${formatBytes(device.memBudget, locale)}`));
+    }
+    if (device.sharedMemUsed !== null && device.sharedMemUsed !== undefined) {
+      const value = format(t.inUse, { used: formatBytes(device.sharedMemUsed, locale) });
+      block.append(element('div', 'caption', `${t.sharedMemory}: ${value}`));
+    }
+    if (device.sharedMemTotal !== null && device.sharedMemTotal !== undefined) {
+      block.append(element('div', 'caption', `${t.sharedMemory} · ${t.budget}: ${formatBytes(device.sharedMemTotal, locale)}`));
     }
     node.append(block);
   }
@@ -185,22 +211,49 @@ const diskSection = (disks: DiskStats | Unavailable, t: Messages, locale: string
       level: levelForPercent(percent),
     });
     meter.node.title = formatPercent(percent, locale);
+    const details = [
+      disk.fileSystem,
+      disk.driveType === 'fixed' ? t.fixedDrive : disk.driveType === 'removable' ? t.removableDrive : null,
+      `${t.freeSpace}: ${formatBytes(disk.total - disk.used, locale)}`,
+    ].filter(Boolean).join(' · ');
+    if (details) node.append(element('div', 'caption', details));
   }
   return node;
 };
 
-const computerSection = (computer: Stats['environment']['computer'], t: Messages): HTMLElement => {
-  const node = section(t.computer);
+const computerSection = (computer: NonNullable<Stats['environment']['computer']>, t: Messages, locale: string): HTMLElement => {
+  const details = computer.details;
+  const node = section(t.computer, [details?.manufacturer, details?.model].filter(Boolean).join(' · ') || null);
   const addRow = (label: string, value: string | null) => {
     const row = element('div', 'info-row');
     row.append(element('span', '', label), element('span', '', value || t.notAvailable));
     node.append(row);
   };
   addRow(t.hostName, computer.hostName);
-  addRow(t.operatingSystem, computer.operatingSystem);
+  const osDetails = [
+    details?.osName ?? computer.operatingSystem,
+    details?.osVersion,
+    details?.osBuild ? format(t.build, { n: details.osBuild }) : null,
+  ].filter(Boolean).join(' · ');
+  addRow(t.operatingSystem, osDetails || null);
   addRow(t.architecture, computer.architecture);
+  if (details?.firmware) addRow(t.firmware, details.firmware);
+  if (computer.uptimeSeconds !== undefined && computer.uptimeSeconds !== null) {
+    const days = Math.floor(computer.uptimeSeconds / 86400);
+    const hours = Math.floor((computer.uptimeSeconds % 86400) / 3600);
+    const minutes = Math.floor((computer.uptimeSeconds % 3600) / 60);
+    addRow(t.uptime, [days ? `${days} d` : null, `${hours} h ${minutes} min`].filter(Boolean).join(' '));
+  }
+  if (details?.memoryModules || details?.memorySpeedMHz) {
+    addRow(t.memoryModules, [
+      details.memoryModules ? `${details.memoryModules} ${t.memoryModules.toLowerCase()}` : null,
+      details.memorySpeedMHz ? `${details.memorySpeedMHz} MHz` : null,
+    ].filter(Boolean).join(' · '));
+  }
   return node;
 };
+
+let openStorageSettings: (() => Promise<unknown>) | null = null;
 
 startFrame(({ state, t, locale, retry }) => {
   if (state.kind === 'loading') {
@@ -238,7 +291,17 @@ startFrame(({ state, t, locale, retry }) => {
     gpuSection(stats.gpus, stats, t, locale),
     diskSection(stats.disks, t, locale),
   );
-  if (stats.environment.computer) nodes.push(computerSection(stats.environment.computer, t));
+  if (stats.environment.computer) nodes.push(computerSection(stats.environment.computer, t, locale));
+  if (stats.environment.platform === 'win32') {
+    const storage = section(t.storageSettings);
+    storage.append(element('div', 'caption', t.storageTip));
+    if (openStorageSettings) {
+      const action = element('div');
+      mountButton(action, { label: t.openStorage, onClick: () => { void openStorageSettings?.().catch(() => undefined); } });
+      storage.append(action);
+    }
+    nodes.push(storage);
+  }
   if (stats.warnings.length > 0) {
     const slot = element('div');
     const critical = stats.warnings.some((warning) => warning.level === 'critical');
@@ -250,4 +313,8 @@ startFrame(({ state, t, locale, retry }) => {
     nodes.push(slot);
   }
   root.replaceChildren(...nodes.filter((node) => node.childNodes.length > 0));
+}, {
+  onStats: (_stats, host) => {
+    openStorageSettings = () => host.serviceRequest({ method: 'POST', path: '/open-storage-settings' });
+  },
 });

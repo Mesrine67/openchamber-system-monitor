@@ -31,6 +31,7 @@ export type MemoryStats = {
   status: 'ok';
   used: number;
   total: number;
+  available?: number;
   swapUsed: number | null;
   swapTotal: number | null;
 };
@@ -40,6 +41,10 @@ export type GpuDevice = {
   utilization: number | null;
   memUsed: number | null;
   memTotal: number | null;
+  /** Windows WDDM allocation budget; it is not necessarily physical VRAM capacity. */
+  memBudget?: number | null;
+  sharedMemUsed?: number | null;
+  sharedMemTotal?: number | null;
 };
 
 export type GpuStats = { status: 'ok'; devices: GpuDevice[] };
@@ -51,6 +56,22 @@ export type Disk = {
   label: string | null;
   used: number;
   total: number;
+  fileSystem?: string | null;
+  driveType?: 'fixed' | 'removable' | null;
+};
+
+export type ComputerInfo = {
+  manufacturer: string | null;
+  model: string | null;
+  firmware: string | null;
+  osName: string | null;
+  osVersion: string | null;
+  osBuild: string | null;
+  physicalCores: number | null;
+  logicalProcessors: number | null;
+  cpuMaxMHz: number | null;
+  memoryModules: number | null;
+  memorySpeedMHz: number | null;
 };
 
 export type DiskStats = { status: 'ok'; items: Disk[]; sampledAt: number };
@@ -66,7 +87,13 @@ export type Stats = {
   environment: {
     platform: Platform;
     container: boolean;
-    computer?: { hostName: string | null; operatingSystem: string | null; architecture: string | null };
+    computer?: {
+      hostName: string | null;
+      operatingSystem: string | null;
+      architecture: string | null;
+      uptimeSeconds?: number | null;
+      details?: ComputerInfo | null;
+    };
   };
   cpu: CpuStats | Unavailable;
   memory: MemoryStats | Unavailable;
