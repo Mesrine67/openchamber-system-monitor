@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 - 2026-10-08
+
+- Rebuild committed extension bundles with Bun 1.4.2 to match the frozen lockfile and release CI.
+
 ## 1.1.0 - 2026-10-08
 
 - Add a full-page System Monitor dashboard with overview, performance, storage, hardware, health, optimization and settings views while keeping Work Status compact.

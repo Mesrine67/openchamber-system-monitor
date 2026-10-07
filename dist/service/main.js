@@ -514,14 +514,14 @@ var createCpuMemCollector = (platform, container, now) => {
         const [vm, swapUsage] = await Promise.all([run(["/usr/bin/vm_stat", "vm_stat"], []), readSwap()]);
         if (!vm.ok)
           return unavailable(vm.missing ? "tool-missing" : "failed", "vm_stat");
-        const used2 = parseVmStat(vm.stdout);
-        if (used2 === null)
+        const used = parseVmStat(vm.stdout);
+        if (used === null)
           return unavailable("failed");
         return {
           status: "ok",
-          used: used2,
+          used,
           total: os.totalmem(),
-          available: Math.max(0, os.totalmem() - used2),
+          available: Math.max(0, os.totalmem() - used),
           cached: null,
           committed: null,
           commitLimit: null,
@@ -656,10 +656,10 @@ var linuxBattery = async () => {
   let acOnline = null;
   const candidates = [];
   for (const device of devices.slice(0, 64)) {
-    const path2 = `/sys/class/power_supply/${device}`;
-    const [type, online] = await Promise.all([readText(`${path2}/type`), readText(`${path2}/online`)]);
+    const path = `/sys/class/power_supply/${device}`;
+    const [type, online] = await Promise.all([readText(`${path}/type`), readText(`${path}/online`)]);
     if (type?.trim() === "Battery")
-      candidates.push(path2);
+      candidates.push(path);
     if (online?.trim() === "1" || online?.trim() === "0")
       acOnline = online.trim();
   }
@@ -994,8 +994,8 @@ var readDisks = async (platform, container) => {
 
 // src/service/collectors/parse-disk-activity.ts
 var nonNegative = (value) => {
-  const number2 = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
-  return Number.isFinite(number2) && number2 >= 0 ? number2 : null;
+  const number = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(number) && number >= 0 ? number : null;
 };
 var parseProcDiskStats = (text) => text.split(/\r?\n/).flatMap((line) => {
   const fields = line.trim().split(/\s+/);
@@ -1339,8 +1339,8 @@ var createGpuCollector = (platform) => {
 
 // src/service/collectors/parse-network.ts
 var byteCount = (value) => {
-  const number2 = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
-  return Number.isSafeInteger(number2) && number2 >= 0 ? number2 : null;
+  const number = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isSafeInteger(number) && number >= 0 ? number : null;
 };
 var linkSpeed = (value) => {
   if (typeof value === "number")
@@ -1396,8 +1396,8 @@ var parseDarwinNetstat = (text) => {
   for (const line of text.split(/\r?\n/)) {
     const fields = line.trim().split(/\s+/);
     if (fields[0] === "Name") {
-      receivedIndex = fields.findIndex((field2) => field2.toLowerCase() === "ibytes");
-      sentIndex = fields.findIndex((field2) => field2.toLowerCase() === "obytes");
+      receivedIndex = fields.findIndex((field) => field.toLowerCase() === "ibytes");
+      sentIndex = fields.findIndex((field) => field.toLowerCase() === "obytes");
       continue;
     }
     if (receivedIndex < 0 || sentIndex < 0 || fields.length <= Math.max(receivedIndex, sentIndex))
@@ -1498,8 +1498,8 @@ import { readdir as readdir4 } from "node:fs/promises";
 
 // src/service/collectors/parse-processes.ts
 var safeNumber = (value) => {
-  const number2 = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
-  return Number.isFinite(number2) && number2 >= 0 ? number2 : null;
+  const number = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(number) && number >= 0 ? number : null;
 };
 var safeName = (value) => {
   if (typeof value !== "string")
@@ -1775,13 +1775,13 @@ var detectContainer = async (platform) => {
 import os4 from "node:os";
 
 // src/service/warnings.ts
-var sustainedHigh = (history, threshold2 = WARN_PERCENT, seconds = 60) => {
+var sustainedHigh = (history, threshold = WARN_PERCENT, seconds = 60) => {
   const required = Math.max(1, Math.ceil(seconds * 1000 / SAMPLE_INTERVAL_MS));
   if (history.length < required)
     return false;
-  return history.slice(-required).every((value) => value !== null && value >= threshold2);
+  return history.slice(-required).every((value) => value !== null && value >= threshold);
 };
-var levelAt = (percent2, warning, critical) => percent2 >= critical ? "critical" : percent2 >= warning ? "warn" : null;
+var levelAt = (percent, warning, critical) => percent >= critical ? "critical" : percent >= warning ? "warn" : null;
 var evaluateWarnings = (input, settings = DEFAULT_MONITOR_SETTINGS) => {
   const warnings = [];
   const thresholds = settings.thresholds;
@@ -1809,10 +1809,10 @@ var evaluateWarnings = (input, settings = DEFAULT_MONITOR_SETTINGS) => {
   }
   if (input.disks.status === "ok") {
     for (const disk of input.disks.items) {
-      const percent2 = diskPercent(disk);
-      if (percent2 === null)
+      const percent = diskPercent(disk);
+      if (percent === null)
         continue;
-      const level = levelAt(percent2, thresholds.diskWarning, thresholds.diskCritical);
+      const level = levelAt(percent, thresholds.diskWarning, thresholds.diskCritical);
       if (level)
         warnings.push({ kind: "disk", target: disk.mount, level });
     }
