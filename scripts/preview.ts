@@ -90,6 +90,21 @@ addEventListener('message', async (event) => {
     reply({ ok: true, payload: { status: response.status, body: await response.text() } });
     return;
   }
+  if (message.type === 'workspace-subscribe') {
+    const { subscriptionId, query } = message.payload;
+    const snapshot = query.kind === 'projects'
+      ? { kind: 'projects', state: 'ready', projects: [{ id: 'preview-project', name: 'Preview project', directory: '/private/preview-project' }] }
+      : query.kind === 'sessions'
+        ? { kind: 'sessions', projectId: query.projectId, state: 'ready', coverage: [], sessions: [
+            { id: 'preview-session-running', title: 'Implementing the dashboard', projectId: query.projectId, directory: '/private/preview-project', parentId: null, createdAt: Date.now() - 3_600_000, updatedAt: Date.now(), archivedAt: null, worktree: null, activity: 'running', outcome: null, items: [] },
+            { id: 'preview-session-completed', title: 'Review storage metrics', projectId: query.projectId, directory: '/private/preview-project', parentId: null, createdAt: Date.now() - 86_400_000, updatedAt: Date.now() - 60_000, archivedAt: null, worktree: null, activity: 'idle', outcome: 'completed', items: [] },
+          ] }
+        : { kind: 'worktrees', projectId: query.projectId, state: 'ready', worktrees: [] };
+    frame.contentWindow.postMessage({ ...envelope, type: 'workspace', payload: { subscriptionId, snapshot } }, '*');
+    reply({ ok: true });
+    return;
+  }
+  if (message.type === 'open-session') { reply({ ok: true }); return; }
   if (message.type === 'storage') {
     const request = message.payload;
     if (request.op === 'get') {

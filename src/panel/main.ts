@@ -3,6 +3,7 @@ import {
   type BadgeHandle, type ButtonHandle, type ProgressHandle, type TabsHandle, type Tone,
 } from '@openchamber/sdk/ui';
 import type { JsonValue } from '@openchamber/sdk';
+import type { GuestProject, GuestSessionRecord, GuestSessionsSnapshot } from '@openchamber/sdk';
 
 import { format, type Messages } from '../i18n/messages.ts';
 import { monitorMessagesFor, type MonitorMessages } from '../i18n/monitor.ts';
@@ -13,6 +14,7 @@ import { sparkline, sparklineFromValues, SPARKLINE_CSS } from '../frame/sparklin
 import { BASE_CSS, element, installStyle, toneFor } from '../frame/ui.ts';
 import { renderWslView } from './wsl-view.ts';
 import { flattenProcessTree, type ProcessTreeRow } from '../shared/process-tree.ts';
+import { filterSessions, sessionState, type SessionFilter, type SessionState } from '../shared/openchamber-activity.ts';
 import type { WslAction, WslCatalog, WslConfigDocument, WslConfigTarget, WslDiagnostics, WslJob, WslSnapshot } from '../shared/wsl.ts';
 import {
   busiestGpu, DEFAULT_MONITOR_SETTINGS, diskPercent, fullestDisk, normalizeMonitorSettings,
@@ -20,7 +22,7 @@ import {
 } from '../shared/stats.ts';
 
 const SETTINGS_KEY = 'system-monitor.settings.v2';
-const TABS = ['overview', 'processes', 'performance', 'storage', 'hardware', 'health', 'optimization', 'wsl', 'settings'] as const;
+const TABS = ['overview', 'processes', 'performance', 'storage', 'hardware', 'health', 'optimization', 'openchamber', 'wsl', 'settings'] as const;
 type TabId = typeof TABS[number];
 type ProcessFilter = 'all' | 'cpu' | 'memory';
 type ProcessSort = 'cpu' | 'memory' | 'name' | 'pid';
@@ -48,6 +50,7 @@ html,body{height:100%;min-height:100%;background:var(--oc-bg);overflow:auto}
 .process-controls{display:grid;grid-template-columns:minmax(180px,2fr) minmax(150px,1fr) auto;gap:8px;align-items:center}.processes-grid{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}.processes-grid th,.processes-grid td{padding:8px 10px;border-bottom:1px solid var(--oc-border);text-align:left}.processes-grid th{color:var(--oc-muted);font-weight:550}.processes-grid td.value{text-align:right;font-variant-numeric:tabular-nums}.processes-grid th:nth-child(2),.processes-grid td:nth-child(2){width:90px}.processes-grid th:nth-child(3),.processes-grid td:nth-child(3),.processes-grid th:nth-child(4),.processes-grid td:nth-child(4){width:120px}.process-sort{border:0;background:transparent;color:inherit;font:inherit;padding:2px 0;cursor:pointer}.process-sort:focus-visible{outline:2px solid var(--oc-primary);outline-offset:2px;border-radius:3px}.process-meta{display:block;color:var(--oc-muted);font-size:10px;margin-top:2px;overflow-wrap:anywhere}.process-name-cell{overflow:hidden}.process-name-control{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:0;border:0;background:transparent;color:var(--oc-fg);font:inherit;text-align:left;cursor:pointer}.process-name-control[aria-current=true]{color:var(--oc-primary-text);font-weight:600}.process-name-control:focus-visible,.process-tree-toggle:focus-visible{outline:2px solid var(--oc-primary);outline-offset:2px;border-radius:3px}.process-tree-toggle{flex:0 0 18px;width:18px;height:18px;padding:0;border:1px solid var(--oc-border);border-radius:4px;background:var(--oc-bg);color:var(--oc-muted);font:inherit;cursor:pointer}.process-tree-spacer{flex:0 0 18px}.process-detail{margin-top:8px}.process-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:6px 14px}
 .recommendation{padding:9px 10px;border:1px solid var(--oc-border);border-radius:var(--oc-radius,8px);display:flex;flex-direction:column;gap:6px}.recommendation strong{font-size:12px}.settings-group{display:flex;flex-direction:column;gap:9px}.select-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,225px),1fr));gap:10px}.select-field{display:flex;flex-direction:column;gap:5px;min-width:0}.switch-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:8px}.settings-note{border-left:2px solid var(--oc-info);padding:7px 9px;color:var(--oc-muted);font-size:11px;background:color-mix(in srgb,var(--oc-info) 5%,transparent)}
 .loading{min-height:140px;display:grid;place-items:center}.header [data-tone=success]{color:var(--oc-success-text)}
+.workspace-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:8px}.workspace-session-list{display:flex;flex-direction:column;gap:7px}.workspace-session{gap:6px}.workspace-session-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.workspace-session-title{min-width:0;overflow-wrap:anywhere}.workspace-session-state{flex:0 0 auto;padding:2px 7px;border-radius:999px;color:var(--oc-muted);background:var(--oc-subtle);font-size:10px}.workspace-session-state[data-state=running],.workspace-session-state[data-state=retrying]{color:var(--oc-primary-text)}.workspace-session-state[data-state=waiting-permission],.workspace-session-state[data-state=waiting-question]{color:var(--oc-warning-text)}.workspace-session-state[data-state=failed]{color:var(--oc-error-text)}.workspace-session-action{display:flex;justify-content:flex-end}
 .wsl-view{gap:10px}.wsl-section-head,.wsl-summary,.wsl-distro-header,.wsl-actions,.wsl-confirm-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.wsl-section-head{justify-content:space-between}.wsl-summary{justify-content:space-between;padding:8px 10px;border:1px solid var(--oc-border);border-radius:var(--oc-radius,8px)}.wsl-list{display:flex;flex-direction:column;gap:8px}.wsl-distro{gap:8px}.wsl-distro-header .card-title{min-width:0;overflow-wrap:anywhere}.wsl-default-label{font-size:10px;color:var(--oc-primary-text)}.wsl-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:5px 10px}.wsl-detail-heading{grid-column:1/-1;margin:4px 0 0}.wsl-actions{padding-top:3px;border-top:1px solid var(--oc-border)}.wsl-action{display:inline-flex}.wsl-status{border-left:2px solid var(--oc-info);padding:7px 9px;color:var(--oc-info-text);background:color-mix(in srgb,var(--oc-info) 6%,transparent);font-size:11px}.wsl-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));align-items:end;gap:8px}.wsl-fields>.wsl-action{align-self:end}.wsl-filters,.wsl-process-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:8px;align-items:end}.wsl-process-list{display:flex;flex-direction:column;gap:4px;max-height:360px;overflow:auto}.wsl-process-row{display:grid;grid-template-columns:minmax(110px,1fr) 90px minmax(90px,.7fr) minmax(110px,.8fr);align-items:center;gap:8px;padding:5px 6px;border-bottom:1px solid var(--oc-border);font-size:11px}.wsl-process-row>*{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wsl-process-row .value:last-child,.wsl-process-row .value:nth-last-child(2){text-align:right;font-variant-numeric:tabular-nums}.wsl-config-card{gap:10px}.wsl-config-field{min-width:0}.wsl-config-field textarea.oc-sdk-input{min-height:280px;resize:vertical;tab-size:2}.wsl-config-warning{border-left:2px solid var(--oc-warning);padding:7px 9px;color:var(--oc-warning-text);background:color-mix(in srgb,var(--oc-warning) 7%,transparent);font-size:11px}.wsl-confirm{color:var(--oc-fg);background:var(--oc-bg);border:1px solid var(--oc-border);border-radius:var(--oc-radius,8px);padding:16px;max-width:min(480px,calc(100vw - 32px));box-shadow:0 18px 50px #0005}.wsl-confirm::backdrop{background:#0008}.wsl-confirm-form{display:flex;flex-direction:column;gap:10px}.wsl-confirm-actions{justify-content:flex-end}
 .skeleton{height:68px;border-radius:var(--oc-radius,8px);background:var(--oc-subtle);opacity:.7}.refreshing{animation:refresh-pulse 180ms ease-out}@keyframes refresh-pulse{50%{opacity:.7}}
 @container (min-width:720px){.page .grid{grid-template-columns:repeat(4,minmax(0,1fr))}.page .wide-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -88,6 +91,17 @@ let wslConfigLoading = false;
 const wslDiagnostics: Record<string, WslDiagnostics | undefined> = {};
 let wslDiagnosticsLoading: string | null = null;
 let wslRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let workspaceProjects: GuestProject[] = [];
+let workspaceSessions: GuestSessionRecord[] = [];
+let workspaceProjectId: string | null = null;
+let workspaceState: 'loading' | 'ready' | 'error' = 'loading';
+let workspaceCoveragePartial = false;
+let workspaceError: 'permission' | 'unavailable' | null = null;
+let workspaceFilter: SessionFilter = 'all';
+let workspaceQuery = '';
+let workspaceProjectUnsubscribe: (() => void) | null = null;
+let workspaceSessionUnsubscribe: (() => void) | null = null;
+let workspaceRequestId = 0;
 
 const shell = element('div', 'shell');
 const header = element('header', 'header');
@@ -127,12 +141,149 @@ root.replaceChildren(shell);
 const tabLabels = (tm: MonitorMessages) => [
   { id: 'overview', label: tm.overview }, { id: 'processes', label: tm.processes }, { id: 'performance', label: tm.performance },
   { id: 'storage', label: tm.storage }, { id: 'hardware', label: tm.hardware },
-  { id: 'health', label: tm.health }, { id: 'optimization', label: tm.optimization }, { id: 'wsl', label: tm.wsl }, { id: 'settings', label: tm.settings },
+  { id: 'health', label: tm.health }, { id: 'optimization', label: tm.optimization }, { id: 'openchamber', label: tm.openchamber }, { id: 'wsl', label: tm.wsl }, { id: 'settings', label: tm.settings },
 ];
 const tabs: TabsHandle = mountTabs(tabsSlot, {
   items: tabLabels(monitorMessagesFor('en')), activeId: activeTab, trackBackground: true,
   onChange: (id) => changeTab(id),
 });
+
+const isPermissionError = (error: unknown): boolean => error instanceof Error && /NOT_GRANTED|capabilit|permission/i.test(error.message);
+
+const subscribeWorkspaceProjects = async (): Promise<void> => {
+  if (!current || workspaceProjectUnsubscribe) return;
+  workspaceState = 'loading';
+  const host = current.host;
+  try {
+    const unsubscribe = await host.onProjects((snapshot) => {
+      workspaceProjects = snapshot.projects;
+      if (snapshot.state === 'error') {
+        workspaceState = 'error';
+        workspaceError = 'unavailable';
+        renderActive();
+        return;
+      }
+      workspaceState = snapshot.state;
+      workspaceError = null;
+      if (!workspaceProjects.some((project) => project.id === workspaceProjectId)) {
+        workspaceProjectId = workspaceProjects[0]?.id ?? null;
+        void subscribeWorkspaceSessions(workspaceProjectId);
+      }
+      renderActive();
+    });
+    workspaceProjectUnsubscribe = unsubscribe;
+  } catch (error) {
+    workspaceState = 'error';
+    workspaceError = isPermissionError(error) ? 'permission' : 'unavailable';
+    renderActive();
+  }
+};
+
+const subscribeWorkspaceSessions = async (projectId: string | null): Promise<void> => {
+  workspaceSessionUnsubscribe?.();
+  workspaceSessionUnsubscribe = null;
+  workspaceProjectId = projectId;
+  workspaceSessions = [];
+  workspaceCoveragePartial = false;
+  if (!projectId || !current) { renderActive(); return; }
+  const requestId = ++workspaceRequestId;
+  workspaceState = 'loading';
+  workspaceError = null;
+  renderActive();
+  try {
+    const unsubscribe = await current.host.onSessions(projectId, (snapshot: GuestSessionsSnapshot) => {
+      if (requestId !== workspaceRequestId || snapshot.projectId !== workspaceProjectId) return;
+      if (snapshot.state === 'error') {
+        workspaceState = 'error';
+        workspaceError = 'unavailable';
+      } else {
+        workspaceState = snapshot.state;
+        workspaceSessions = [...snapshot.sessions].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 100);
+        workspaceCoveragePartial = snapshot.coverage.some((entry) => entry.state !== 'ready');
+        workspaceError = null;
+      }
+      renderActive();
+    });
+    if (requestId === workspaceRequestId) workspaceSessionUnsubscribe = unsubscribe;
+    else unsubscribe();
+  } catch (error) {
+    if (requestId !== workspaceRequestId) return;
+    workspaceState = 'error';
+    workspaceError = isPermissionError(error) ? 'permission' : 'unavailable';
+    renderActive();
+  }
+};
+
+const sessionStateLabel = (state: SessionState, tm: MonitorMessages): string => ({
+  running: tm.sessionRunning, retrying: tm.sessionRetrying, 'waiting-permission': tm.sessionWaitingPermission,
+  'waiting-question': tm.sessionWaitingQuestion, failed: tm.sessionFailed, completed: tm.sessionCompleted, idle: tm.sessionIdle,
+})[state];
+
+const renderOpenChamberTab = (tm: MonitorMessages, locale: string): HTMLElement => {
+  const view = element('div', 'section openchamber-view');
+  const intro = element('p', 'caption', tm.sessionObservedActivity);
+  view.append(element('h2', 'section-title', tm.workspaceActivity), intro);
+  const controls = element('div', 'workspace-controls');
+  const projectSlot = element('div');
+  mountSelect(projectSlot, {
+    label: tm.selectProject,
+    value: workspaceProjectId,
+    options: workspaceProjects.map((project) => ({ id: project.id, label: project.name })),
+    placeholder: tm.selectProject,
+    searchable: true,
+    searchPlaceholder: tm.selectProject,
+    onChange: (id) => { void subscribeWorkspaceSessions(id); },
+    disabled: workspaceState === 'loading' && workspaceProjects.length === 0,
+  });
+  const filterSlot = element('div');
+  mountSelect(filterSlot, {
+    label: tm.sessionFilter,
+    value: workspaceFilter,
+    options: [
+      { id: 'all', label: tm.allSessions }, { id: 'active', label: tm.activeSessions },
+      { id: 'waiting', label: tm.waitingSessions }, { id: 'failed', label: tm.failedSessions },
+    ],
+    onChange: (id) => { if (id === 'all' || id === 'active' || id === 'waiting' || id === 'failed') { workspaceFilter = id; renderActive(); } },
+  });
+  controls.append(projectSlot, filterSlot);
+  const searchSlot = element('div');
+  mountSearchField(searchSlot, { value: workspaceQuery, label: tm.searchSessions, placeholder: tm.searchSessions, onChange: (value) => { workspaceQuery = value; renderActive(); } });
+  view.append(controls, searchSlot);
+  if (workspaceCoveragePartial) view.append(element('p', 'settings-note', tm.sessionCoveragePartial));
+  if (workspaceState === 'loading') {
+    const loading = element('div', 'loading'); mountSpinner(loading, { size: 'default', label: tm.workspaceActivity }); view.append(loading); return view;
+  }
+  if (workspaceState === 'error') {
+    const slot = element('div');
+    mountBanner(slot, { tone: 'warning', title: workspaceError === 'permission' ? tm.sessionsPermissionRequired : tm.sessionsUnavailable });
+    view.append(slot); return view;
+  }
+  if (!workspaceProjects.length) { view.append(element('div', 'empty', tm.noProjects)); return view; }
+  if (!workspaceSessions.length) { view.append(element('div', 'empty', tm.noSessions)); return view; }
+  const sessions = filterSessions(workspaceSessions, workspaceFilter, workspaceQuery);
+  if (!sessions.length) { view.append(element('div', 'empty', tm.noMatchingSessions)); return view; }
+  const list = element('div', 'workspace-session-list');
+  for (const session of sessions) {
+    const card = element('article', 'card workspace-session');
+    const head = element('div', 'workspace-session-head');
+    const identity = element('div', 'workspace-session-title');
+    identity.append(element('strong', '', session.title || tm.openSession));
+    const state = sessionState(session);
+    const status = element('span', 'workspace-session-state', sessionStateLabel(state, tm));
+    status.dataset.state = state;
+    head.append(identity, status);
+    const meta = element('div', 'caption', `${tm.sessionUpdated} ${new Date(session.updatedAt).toLocaleString(locale)}`);
+    if (session.archivedAt !== null) meta.append(` · ${tm.archivedSession}`);
+    const actionSlot = element('div', 'workspace-session-action');
+    mountButton(actionSlot, { label: tm.openSession, size: 'xs', variant: 'outline', onClick: () => {
+      void current?.host.openSession(session.id).catch((error: unknown) => current?.host.toast({ kind: 'error', message: error instanceof Error ? error.message : tm.sessionsUnavailable }));
+    } });
+    card.append(head, meta, actionSlot);
+    list.append(card);
+  }
+  view.append(list);
+  return view;
+};
 
 type MetricTile = {
   node: HTMLElement; value: HTMLElement; detail: HTMLElement; barSlot: HTMLElement; bar: ProgressHandle;
@@ -991,6 +1142,7 @@ const changeTab = (id: string): void => {
   setWslAutoRefresh(activeTab === 'wsl');
   tabs.update({ items: tabLabels(current?.tm ?? monitorMessagesFor('en')), activeId: activeTab, trackBackground: true, onChange: changeTab });
   renderActive();
+  if (activeTab === 'openchamber') void subscribeWorkspaceProjects();
   if (activeTab === 'wsl') {
     if (!wslSnapshot) void refreshWslSnapshot();
     resumeWslJobPolling();
@@ -1039,6 +1191,12 @@ const renderActive = (): void => {
     return;
   }
   const { state, t, tm, locale } = current;
+  if (activeTab === 'openchamber') {
+    const view = renderOpenChamberTab(tm, locale);
+    content.replaceChildren(view);
+    renderedTab = activeTab;
+    return;
+  }
   if (state.kind === 'loading') {
     const loading = element('div', 'loading'); mountSpinner(loading, { size: 'default', label: t.measuring });
     content.replaceChildren(loading); return;

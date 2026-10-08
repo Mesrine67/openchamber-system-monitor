@@ -47,6 +47,11 @@ export type MonitorMessages = {
   wslDiagnostics: string; pid: string; cpu: string; memory: string; protocol: string; address: string; port: string; noListeningPorts: string; diagnosticsUnavailable: string;
   wslAddresses: string; wslGateway: string; wslDnsServers: string; wslConfiguredMode: string; wslNetworkUnavailable: string;
   searchWslProcesses: string; sortWslProcesses: string; sortWslByCpu: string; sortWslByMemory: string; noWslProcessMatches: string; wslProcessSample: string;
+  openchamber: string; workspaceActivity: string; selectProject: string; allSessions: string; activeSessions: string; waitingSessions: string; failedSessions: string;
+  noProjects: string; noSessions: string; noMatchingSessions: string; sessionsPermissionRequired: string; sessionsUnavailable: string;
+  sessionRunning: string; sessionRetrying: string; sessionWaitingPermission: string; sessionWaitingQuestion: string; sessionIdle: string; sessionFailed: string; sessionCompleted: string;
+  archivedSession: string; openSession: string; sessionUpdated: string; sessionCoveragePartial: string; sessionObservedActivity: string;
+  sessionFilter: string; searchSessions: string;
 };
 
 const en: MonitorMessages = {
@@ -106,6 +111,11 @@ const en: MonitorMessages = {
   wslDiagnostics: 'Processes and listening ports', pid: 'PID', cpu: 'CPU', memory: 'Memory', protocol: 'Protocol', address: 'Address', port: 'Port', noListeningPorts: 'No listening ports detected.', diagnosticsUnavailable: 'Diagnostics unavailable.',
   wslAddresses: 'Distribution addresses', wslGateway: 'Default gateway', wslDnsServers: 'DNS servers', wslConfiguredMode: 'Configured network mode', wslNetworkUnavailable: 'Guest network details are unavailable; required Linux tools may be missing.',
   searchWslProcesses: 'Search process name or PID', sortWslProcesses: 'Sort processes', sortWslByCpu: 'CPU usage', sortWslByMemory: 'Memory usage', noWslProcessMatches: 'No WSL process matches this search.', wslProcessSample: 'Sample combines up to 100 processes ranked by CPU and 100 ranked by memory. CPU is guest process usage; distribution-level CPU is not exposed reliably.',
+  openchamber: 'OpenChamber', workspaceActivity: 'Session activity', selectProject: 'Project', allSessions: 'All sessions', activeSessions: 'Active', waitingSessions: 'Waiting', failedSessions: 'Failed',
+  noProjects: 'No OpenChamber projects are available on this server.', noSessions: 'No sessions are available for this project.', noMatchingSessions: 'No sessions match this filter.', sessionsPermissionRequired: 'Approve the Sessions capability for this extension in OpenChamber, then reopen this page.', sessionsUnavailable: 'OpenChamber session activity is unavailable.',
+  sessionRunning: 'Running', sessionRetrying: 'Retrying', sessionWaitingPermission: 'Waiting for permission', sessionWaitingQuestion: 'Waiting for your answer', sessionIdle: 'Idle', sessionFailed: 'Last run failed', sessionCompleted: 'Last run completed',
+  archivedSession: 'Archived', openSession: 'Open session', sessionUpdated: 'Updated', sessionCoveragePartial: 'Some project sessions may still be loading.', sessionObservedActivity: 'Shows session activity reported by OpenChamber; it does not identify process ownership or expose terminal output.',
+  sessionFilter: 'Filter sessions', searchSessions: 'Search session titles',
 };
 
 const fr: MonitorMessages = {
@@ -165,6 +175,11 @@ const fr: MonitorMessages = {
   wslDiagnostics: 'Processus et ports en écoute', pid: 'PID', cpu: 'CPU', memory: 'Mémoire', protocol: 'Protocole', address: 'Adresse', port: 'Port', noListeningPorts: 'Aucun port en écoute détecté.', diagnosticsUnavailable: 'Diagnostic indisponible.',
   wslAddresses: 'Adresses de la distribution', wslGateway: 'Passerelle par défaut', wslDnsServers: 'Serveurs DNS', wslConfiguredMode: 'Mode réseau configuré', wslNetworkUnavailable: 'Les informations réseau de l’invité sont indisponibles ; des outils Linux requis sont peut-être absents.',
   searchWslProcesses: 'Rechercher un processus ou un PID', sortWslProcesses: 'Trier les processus', sortWslByCpu: 'Utilisation CPU', sortWslByMemory: 'Utilisation mémoire', noWslProcessMatches: 'Aucun processus WSL ne correspond à cette recherche.', wslProcessSample: 'Échantillon combinant jusqu’à 100 processus classés par CPU et 100 par mémoire. Le CPU est mesuré dans l’invité ; la consommation CPU par distribution reste indisponible de façon fiable.',
+  openchamber: 'OpenChamber', workspaceActivity: 'Activité des sessions', selectProject: 'Projet', allSessions: 'Toutes les sessions', activeSessions: 'Actives', waitingSessions: 'En attente', failedSessions: 'En échec',
+  noProjects: 'Aucun projet OpenChamber n’est disponible sur ce serveur.', noSessions: 'Aucune session disponible pour ce projet.', noMatchingSessions: 'Aucune session ne correspond à ce filtre.', sessionsPermissionRequired: 'Autorise la capacité Sessions pour cette extension dans OpenChamber, puis rouvre cette page.', sessionsUnavailable: 'L’activité des sessions OpenChamber est indisponible.',
+  sessionRunning: 'En cours', sessionRetrying: 'Nouvel essai', sessionWaitingPermission: 'En attente d’une autorisation', sessionWaitingQuestion: 'En attente de ta réponse', sessionIdle: 'Inactive', sessionFailed: 'Dernière exécution en échec', sessionCompleted: 'Dernière exécution terminée',
+  archivedSession: 'Archivée', openSession: 'Ouvrir la session', sessionUpdated: 'Mise à jour', sessionCoveragePartial: 'Certaines sessions du projet sont peut-être encore en cours de chargement.', sessionObservedActivity: 'Affiche l’activité fournie par OpenChamber ; cette vue n’attribue pas de processus et ne révèle pas la sortie des terminaux.',
+  sessionFilter: 'Filtrer les sessions', searchSessions: 'Rechercher dans les titres des sessions',
 };
 
 const partial: Partial<Record<string, Partial<MonitorMessages>>> = {

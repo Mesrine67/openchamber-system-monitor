@@ -5,7 +5,7 @@ System Monitor is a local OpenChamber extension for monitoring and diagnosing th
 ## What it includes
 
 - **Work Status:** compact health, CPU, memory, GPU, and fullest-volume readings.
-- **Rail panel:** Overview, Processes, Performance, Storage, Hardware, Health, Optimization, and Settings views. The Processes view searches and sorts the configured bounded CPU/memory sample; it does not claim to enumerate every system process. CPU history can switch between overall and per-core; storage separates capacity from activity.
+- **Rail panel:** Overview, Processes, Performance, Storage, Hardware, Health, Optimization, OpenChamber session activity, WSL, and Settings views. The Processes view searches and sorts the configured bounded CPU/memory sample; it does not claim to enumerate every system process. CPU history can switch between overall and per-core; storage separates capacity from activity.
 - **Full-page dashboard:** open System Monitor from OpenChamber’s **Extension pages** menu. The SDK does not let an extension open its contributed page programmatically; the rail button explains where to find it.
 - **Health and recommendations:** shared health state, configurable warning/critical thresholds, and read-only suggestions. The only current system action opens Windows Storage settings.
 - **Diagnostics:** copy a sanitized Markdown/JSON summary that omits hostnames, user paths, disk identifiers, and process lists.
@@ -63,6 +63,8 @@ Defaults are 85% warning and 95% critical for memory and disk. CPU/GPU alerts re
 The service binds to `127.0.0.1`, checks OpenChamber’s bearer token on every endpoint, and has no external listener, analytics, telemetry, or cloud dependency. System actions are explicit; monitoring and recommendations do not delete files, stop processes, edit the registry, or disable services. Process names/PIDs stay in the UI and are excluded from copied diagnostics.
 
 WSL management is available only when the OpenChamber service runs on Windows. Its collectors run only after opening the WSL tab; stopped distributions are not started to collect details. The extension follows OpenChamber’s current theme and locale rather than introducing WSL UI’s separate theme/language settings. It intentionally does not execute arbitrary distro commands, install arbitrary rootfs/container/LXC images, provision Linux desktops, mount physical disks, invoke UAC, or provide a system tray. WSL UI is a native application with elevated operations; OpenChamber extensions run with the host service’s current user privileges and SDK surface. See [docs/wsl.md](docs/wsl.md) for feature coverage and limits.
+
+OpenChamber session activity is read through the approved SDK `sessions` capability. It shows project session titles, recent update times, archive state, and the host-reported activity/outcome, and can open a session in OpenChamber. It does not read conversation content, terminal output, shell history, or attribute operating-system processes to sessions. Approve the Sessions capability when installing/updating the extension to use this view.
 
 ## Development
 

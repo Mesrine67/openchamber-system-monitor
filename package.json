@@ -23,6 +23,7 @@
       "openchamber": ">=2.0.1"
     },
     "contributes": {
+      "capabilities": ["sessions"],
       "panel": {
         "id": "system-monitor",
         "name": "System Monitor",
