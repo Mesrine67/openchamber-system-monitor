@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { parseWslCatalog, parseWslDefaultVersion, parseWslDiagnostics, parseWslDistroDetails, parseWslList, parseWslRegistrationMetadata, parseWslVersions } from '../src/service/collectors/parse-wsl.ts';
-import { withDefaultWslUser } from '../src/service/collectors/parse-wsl-conf.ts';
+import { withDefaultWslUser, withWslConfigSetting } from '../src/service/collectors/parse-wsl-conf.ts';
 import { addWslPendingRestart, clearWslPendingRestart, inspectWslConfig, normalizeWslPendingRestarts, parseWslAction, parseWslConfigUpdate } from '../src/shared/wsl.ts';
 
 describe('WSL parser', () => {
@@ -61,6 +61,10 @@ describe('WSL parser', () => {
         { unit: 'docker.service', loadState: 'loaded', activeState: 'active', subState: 'exited', description: 'Docker Application Container Engine' },
         { unit: 'inactive-worker.service', loadState: 'loaded', activeState: 'inactive', subState: 'dead', description: 'A disabled service with a descriptive name' },
       ] },
+      mounts: { status: 'ok', items: [
+        { source: '/dev/sda1', target: '/', fileSystem: 'ext4' },
+        { source: 'C:\\', target: '/mnt/c', fileSystem: '9p' },
+      ] },
       network: {
         status: 'ok', addresses: ['172.30.144.20', 'fe80::215:5dff:fe00:1234'], gateway: '172.30.144.1',
         dnsServers: ['10.255.255.254', '2001:db8::53'], configuredMode: null,
@@ -96,6 +100,7 @@ describe('WSL parser', () => {
       processes: { status: 'unavailable', reason: 'The ps utility is not available in this distribution.', items: [] },
       listeningPorts: { status: 'ok', items: [] },
       services: { status: 'unavailable', reason: 'Service data was not returned.', items: [] },
+      mounts: { status: 'unavailable', reason: 'Mount data was not returned.', items: [] },
       network: { status: 'unavailable', reason: 'Network data was not returned by the guest probe.', addresses: [], gateway: null, dnsServers: [], configuredMode: null },
     });
   });
@@ -206,6 +211,15 @@ describe('WSL parser', () => {
     expect(withDefaultWslUser(config, 'mike')).toBe('# keep this comment\n[boot]\nsystemd=true\n\n[user]\ndefault=mike\n[interop]\nenabled=true\n');
     expect(withDefaultWslUser('[boot]\nsystemd=true\n', 'mike')).toBe('[boot]\nsystemd=true\n\n[user]\ndefault=mike\n');
     expect(() => withDefaultWslUser('[user]\ndefault=old\n', 'bad;command')).toThrow();
+  });
+
+  test('updates a guided WSL setting without dropping comments, unknown keys or duplicate sections', () => {
+    const config = '# keep comment\r\n[wsl2]\r\nmemory=8GB # memory note\r\nfutureOption=keep\r\n[experimental]\r\nsparseVhd=true\r\n[wsl2]\r\nprocessors=4\r\n';
+    expect(withWslConfigSetting(config, 'wsl2', 'memory', '12GB'))
+      .toBe('# keep comment\n[wsl2]\nmemory=12GB # memory note\nfutureOption=keep\n[experimental]\nsparseVhd=true\n[wsl2]\nprocessors=4\n');
+    expect(withWslConfigSetting('[boot]\nsystemd=true\n', 'user', 'default', 'mike'))
+      .toBe('[boot]\nsystemd=true\n\n[user]\ndefault=mike\n');
+    expect(() => withWslConfigSetting('[wsl2]', 'wsl2', 'memory', '8GB\nboot=unsafe')).toThrow();
   });
 
   test('accepts only bounded WSL config files with exact confirmations', () => {

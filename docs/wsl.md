@@ -8,11 +8,11 @@ System Monitor adds an optional WSL manager for Windows-hosted OpenChamber. It f
 | --- | --- |
 | Installed distributions | List, status, default, WSL version, install source, detected virtual-disk file size and guest OS/kernel details for running distributions. Search and filter by state, WSL version and source. |
 | Running guest readings | Root filesystem capacity, process count, and Windows GPU integration checks. xrdp is exposed only when a valid port is detected. Memory is shown once as shared WSL 2 VM memory when `free` is installed; it is not a per-distribution reading. CPU use per distribution remains unavailable because the WSL host API does not provide a reliable per-distro CPU measurement. |
-| On-demand guest diagnostics | For a running WSL 2 distribution, inspect a bounded process sample formed from the top 100 CPU and top 100 memory entries, merged by PID, plus up to 100 TCP/UDP listening sockets, guest IPv4/IPv6 addresses, the IPv4 default gateway and configured DNS servers. The process view supports local name/PID search and CPU/memory sorting. CPU and memory percentages are guest process readings, not per-distribution host attribution. The explicitly configured global networking mode is shown when readable; it is not presented as proof of effective runtime mode. Process command lines and user names are not collected. Missing `ps`, `ss` or `ip` is reported as unavailable. No process control is exposed. |
+| On-demand guest diagnostics | For a running WSL 2 distribution, inspect a bounded process sample formed from the top 100 CPU and top 100 memory entries, merged by PID, plus up to 100 TCP/UDP listening sockets and mounted filesystems, guest IPv4/IPv6 addresses, the IPv4 default gateway and configured DNS servers. The process view supports local name/PID search and CPU/memory sorting. CPU and memory percentages are guest process readings, not per-distribution host attribution. The explicitly configured global networking mode is shown when readable; it is not presented as proof of effective runtime mode. Process command lines and user names are not collected. Missing `ps`, `ss`, `ip` or `findmnt` is reported as unavailable. No process control is exposed. |
 | Global WSL | Show WSL/kernel versions and default distro/version; load the official `wsl --list --online` catalog on request; update WSL, set the default version, and shut down after a typed confirmation. |
 | Distribution lifecycle | Start, stop, restart, set default, switch WSL 1/2 with a backup warning and typed confirmation, and open Terminal, Explorer, VS Code or detected xrdp. |
 | Install and backup | Install a selected entry from Microsoft's own online WSL catalog; import and export TAR archives; clone or rename through an export/import staging archive, checking destination paths and preserving recovery archives on failed imports. |
-| Configuration | Read and edit `%UserProfile%\\.wslconfig` and a distribution's `/etc/wsl.conf`. Save requires typing the exact confirmation phrase and a notice describing the impact of WSL settings. Set default Linux user validates the account and updates only the `[user]` section. |
+| Configuration | Read and edit `%UserProfile%\\.wslconfig` and a distribution's `/etc/wsl.conf`. A guided editor covers common global VM limits/networking options and per-distro systemd/automount/interop toggles; the advanced text editor remains available. Guided changes preserve comments and unknown keys. Save requires typing the exact confirmation phrase and a notice describing the impact of WSL settings. Set default Linux user validates the account and updates only the `[user]` section. |
 | Apply configuration | Saved global and per-distribution configuration targets remain visible as pending until a successful full WSL shutdown or a successful start/restart of the affected distribution. This state is stored through the OpenChamber extension storage API and contains only the target kind and distro name. |
 | Disk management | Move, resize, sparse mode and compact operations are available as fixed WSL CLI actions. Long-running or disruptive actions require typed confirmation. They run with OpenChamber's current privileges and may be unavailable when that process is not elevated. |
 
@@ -30,7 +30,7 @@ This is not 100% feature parity with [WSL UI](https://github.com/octasoft-ltd/ws
 - a system tray, startup behavior or independent application settings;
 - WSL UI's private theme editor or language selector (the OpenChamber theme/locale is authoritative);
 - detailed distro installation paths/creation dates or reliable CPU-by-distro usage;
-- WSL UI's native semantic configuration editor and mounted-disk status panel.
+- WSL UI's full native semantic configuration editor (the extension's guided editor intentionally covers a safe subset and retains the advanced text editor).
 
 These omissions avoid arbitrary code installation/execution, admin elevation, duplicated host preferences and invented metrics. WSL 2-only virtual disk operations are hidden for WSL 1 distributions. The extension shows unavailable readings as unavailable rather than fabricating a value.
 
@@ -39,7 +39,7 @@ These omissions avoid arbitrary code installation/execution, admin elevation, du
 The panel calls only authenticated local service routes:
 
 - `GET /wsl`: installed distributions and live details for already-running distros.
-- `GET /wsl/diagnostics?distro=<name>`: bounded process, listening-port, and (when systemd is available) service-state diagnostics for one already-running WSL 2 distribution, plus local network configuration readings.
+- `GET /wsl/diagnostics?distro=<name>`: bounded process, listening-port, mount, and (when systemd is available) service-state diagnostics for one already-running WSL 2 distribution, plus local network configuration readings.
 - `GET /wsl/catalog`: official WSL online distribution list; this network-backed Microsoft CLI command runs only after the user requests the catalog.
 - `GET /wsl/config`: read a supported global or per-distribution configuration file.
 - `POST /wsl/config`: save a bounded configuration after exact typed confirmation.

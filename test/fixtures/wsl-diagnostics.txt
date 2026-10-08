@@ -14,6 +14,8 @@ __SERVICES__
 cron.service loaded active running Regular background program processing daemon
 docker.service loaded active exited Docker Application Container Engine
 inactive-worker.service loaded inactive dead A disabled service with a descriptive name
+__MOUNTS__
+{"filesystems":[{"source":"/dev/sda1","target":"/","fstype":"ext4"},{"source":"C:\\","target":"/mnt/c","fstype":"9p"}]}
 __NETWORK__
 ADDRESSES=172.30.144.20 fe80::215:5dff:fe00:1234 invalid
 GATEWAY=172.30.144.1

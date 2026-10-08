@@ -40,6 +40,10 @@ export type MonitorMessages = {
   globalConfig: string; distributionConfig: string; editConfig: string; saveConfig: string; configNotice: string; configSaved: string;
   pendingRestartTitle: string; pendingRestartGlobal: string; pendingRestartDistribution: string; pendingRestartStorageError: string;
   configSummary: string; configBootCommandWarning: string; configNetworkingDisabledWarning: string;
+  configGuided: string; configAdvanced: string; configVmMemory: string; configVmProcessors: string; configVmSwap: string;
+  configNetworkingMode: string; configSystemd: string; configAutoMount: string; configMountFstab: string;
+  configDnsTunneling: string; configFirewall: string; configAutoProxy: string; configGuiApplications: string; configGpuSupport: string;
+  configInterop: string; configWindowsPath: string; configNoChange: string;
   runningCount: string; defaultWslVersion: string; setDefaultWslVersion: string; updateWsl: string; updateWslWarning: string; defaultVersionWarning: string;
   searchDistributions: string; stateFilter: string; versionFilter: string; allDistributions: string; runningFilter: string; stoppedFilter: string; noFilteredDistributions: string;
   sourceFilter: string; source: string; storeSource: string; importedSource: string; unknownSource: string; virtualDiskSize: string;
@@ -47,6 +51,7 @@ export type MonitorMessages = {
   cloneDistro: string; renameDistro: string; cloneName: string; cloneLocation: string; cloneWarning: string; renameWarning: string; defaultDistro: string; cpuPerDistroUnavailable: string;
   wslDiagnostics: string; pid: string; cpu: string; memory: string; protocol: string; address: string; port: string; noListeningPorts: string; diagnosticsUnavailable: string;
   wslServices: string; wslServicesCount: string; noWslServices: string;
+  wslMounts: string; wslMountSource: string; wslMountTarget: string; wslMountFileSystem: string; wslMountsUnavailable: string;
   wslAddresses: string; wslGateway: string; wslDnsServers: string; wslConfiguredMode: string; wslNetworkUnavailable: string;
   searchWslProcesses: string; sortWslProcesses: string; sortWslByCpu: string; sortWslByMemory: string; noWslProcessMatches: string; wslProcessSample: string;
   openchamber: string; workspaceActivity: string; selectProject: string; allSessions: string; activeSessions: string; waitingSessions: string; failedSessions: string;
@@ -103,6 +108,11 @@ const en: MonitorMessages = {
   pendingRestartTitle: 'Changes waiting for restart', pendingRestartGlobal: 'Global settings need a full WSL shutdown to take effect.', pendingRestartDistribution: '{distro} settings will apply the next time this distribution starts.', pendingRestartStorageError: 'Could not persist the pending WSL restart notice.',
   configSummary: 'Detected settings', configBootCommandWarning: 'This configuration runs a command as root when the distribution starts. Review it before saving.',
   configNetworkingDisabledWarning: 'Networking is explicitly disabled for the WSL 2 virtual machine.',
+  configGuided: 'Guided settings', configAdvanced: 'Advanced configuration text', configVmMemory: 'WSL 2 memory limit (for example 8GB)',
+  configVmProcessors: 'WSL 2 logical processors', configVmSwap: 'WSL 2 swap size (for example 4GB)', configNetworkingMode: 'WSL 2 networking mode',
+  configDnsTunneling: 'DNS tunneling', configFirewall: 'Windows Firewall integration', configAutoProxy: 'Use Windows proxy settings', configGuiApplications: 'WSLg Linux GUI applications', configGpuSupport: 'GPU support for Linux applications',
+  configSystemd: 'Enable systemd', configAutoMount: 'Automatically mount Windows drives', configMountFstab: 'Process /etc/fstab at startup',
+  configInterop: 'Allow launching Windows processes', configWindowsPath: 'Add Windows paths to Linux PATH', configNoChange: 'No change',
   runningCount: '{running} running of {total} distributions', defaultWslVersion: 'Default WSL version', setDefaultWslVersion: 'Set default version to WSL {version}',
   updateWsl: 'Update WSL', updateWslWarning: 'This downloads and installs the current WSL package. Running distributions may need to be restarted.',
   defaultVersionWarning: 'This changes the WSL version used for newly installed distributions. Existing distributions are not converted.',
@@ -113,6 +123,7 @@ const en: MonitorMessages = {
   defaultDistro: 'Default distribution', cpuPerDistroUnavailable: 'WSL does not expose reliable CPU usage per distribution.',
   wslDiagnostics: 'Processes and listening ports', pid: 'PID', cpu: 'CPU', memory: 'Memory', protocol: 'Protocol', address: 'Address', port: 'Port', noListeningPorts: 'No listening ports detected.', diagnosticsUnavailable: 'Diagnostics unavailable.',
   wslServices: 'System services', wslServicesCount: '{count} services', noWslServices: 'No system services reported by systemd.',
+  wslMounts: 'Mounted filesystems', wslMountSource: 'Source', wslMountTarget: 'Mount point', wslMountFileSystem: 'Filesystem', wslMountsUnavailable: 'Mount data is unavailable in this distribution.',
   wslAddresses: 'Distribution addresses', wslGateway: 'Default gateway', wslDnsServers: 'DNS servers', wslConfiguredMode: 'Configured network mode', wslNetworkUnavailable: 'Guest network details are unavailable; required Linux tools may be missing.',
   searchWslProcesses: 'Search process name or PID', sortWslProcesses: 'Sort processes', sortWslByCpu: 'CPU usage', sortWslByMemory: 'Memory usage', noWslProcessMatches: 'No WSL process matches this search.', wslProcessSample: 'Sample combines up to 100 processes ranked by CPU and 100 ranked by memory. CPU is guest process usage; distribution-level CPU is not exposed reliably.',
   openchamber: 'OpenChamber', workspaceActivity: 'Session activity', selectProject: 'Project', allSessions: 'All sessions', activeSessions: 'Active', waitingSessions: 'Waiting', failedSessions: 'Failed',
@@ -169,6 +180,11 @@ const fr: MonitorMessages = {
   pendingRestartTitle: 'Modifications en attente de redémarrage', pendingRestartGlobal: 'Les réglages globaux seront appliqués après un arrêt complet de WSL.', pendingRestartDistribution: 'Les réglages de {distro} seront appliqués à son prochain démarrage.', pendingRestartStorageError: 'Impossible d’enregistrer l’avis de redémarrage WSL en attente.',
   configSummary: 'Réglages détectés', configBootCommandWarning: 'Cette configuration exécute une commande en tant que root au démarrage de la distribution. Vérifie-la avant l’enregistrement.',
   configNetworkingDisabledWarning: 'Le réseau est explicitement désactivé pour la machine virtuelle WSL 2.',
+  configGuided: 'Réglages guidés', configAdvanced: 'Configuration texte avancée', configVmMemory: 'Limite mémoire WSL 2 (exemple : 8GB)',
+  configVmProcessors: 'Nombre de processeurs logiques WSL 2', configVmSwap: 'Taille du swap WSL 2 (exemple : 4GB)', configNetworkingMode: 'Mode réseau WSL 2',
+  configDnsTunneling: 'Tunnel DNS', configFirewall: 'Intégration du pare-feu Windows', configAutoProxy: 'Utiliser le proxy Windows', configGuiApplications: 'Applications Linux graphiques via WSLg', configGpuSupport: 'Prise en charge GPU pour les applications Linux',
+  configSystemd: 'Activer systemd', configAutoMount: 'Monter automatiquement les lecteurs Windows', configMountFstab: 'Traiter /etc/fstab au démarrage',
+  configInterop: 'Autoriser le lancement des processus Windows', configWindowsPath: 'Ajouter les chemins Windows au PATH Linux', configNoChange: 'Ne pas modifier',
   runningCount: '{running} en cours sur {total} distributions', defaultWslVersion: 'Version WSL par défaut', setDefaultWslVersion: 'Définir la version par défaut sur WSL {version}',
   updateWsl: 'Mettre WSL à jour', updateWslWarning: 'Cette action télécharge et installe le paquet WSL actuel. Les distributions en cours peuvent devoir être redémarrées.',
   defaultVersionWarning: 'Ce réglage s’applique aux prochaines installations. Il ne convertit pas les distributions existantes.',
@@ -179,6 +195,7 @@ const fr: MonitorMessages = {
   defaultDistro: 'Distribution par défaut', cpuPerDistroUnavailable: 'WSL ne fournit pas de mesure CPU fiable pour chaque distribution.',
   wslDiagnostics: 'Processus et ports en écoute', pid: 'PID', cpu: 'CPU', memory: 'Mémoire', protocol: 'Protocole', address: 'Adresse', port: 'Port', noListeningPorts: 'Aucun port en écoute détecté.', diagnosticsUnavailable: 'Diagnostic indisponible.',
   wslServices: 'Services système', wslServicesCount: '{count} services', noWslServices: 'Aucun service système signalé par systemd.',
+  wslMounts: 'Systèmes de fichiers montés', wslMountSource: 'Source', wslMountTarget: 'Point de montage', wslMountFileSystem: 'Système de fichiers', wslMountsUnavailable: 'Les montages ne sont pas disponibles dans cette distribution.',
   wslAddresses: 'Adresses de la distribution', wslGateway: 'Passerelle par défaut', wslDnsServers: 'Serveurs DNS', wslConfiguredMode: 'Mode réseau configuré', wslNetworkUnavailable: 'Les informations réseau de l’invité sont indisponibles ; des outils Linux requis sont peut-être absents.',
   searchWslProcesses: 'Rechercher un processus ou un PID', sortWslProcesses: 'Trier les processus', sortWslByCpu: 'Utilisation CPU', sortWslByMemory: 'Utilisation mémoire', noWslProcessMatches: 'Aucun processus WSL ne correspond à cette recherche.', wslProcessSample: 'Échantillon combinant jusqu’à 100 processus classés par CPU et 100 par mémoire. Le CPU est mesuré dans l’invité ; la consommation CPU par distribution reste indisponible de façon fiable.',
   openchamber: 'OpenChamber', workspaceActivity: 'Activité des sessions', selectProject: 'Projet', allSessions: 'Toutes les sessions', activeSessions: 'Actives', waitingSessions: 'En attente', failedSessions: 'En échec',

@@ -80,6 +80,7 @@ export type WslCatalog = { supported: boolean; items: WslCatalogItem[]; error: s
 export type WslProcess = { pid: number; name: string; cpuPercent: number | null; memoryPercent: number | null };
 export type WslListeningPort = { protocol: 'tcp' | 'udp'; address: string; port: number; processName: string | null; pid: number | null };
 export type WslSystemService = { unit: string; loadState: string; activeState: string; subState: string; description: string | null };
+export type WslMount = { source: string; target: string; fileSystem: string };
 export type WslReadings<T> = { status: 'ok'; items: T[] } | { status: 'unavailable'; reason: string; items: [] };
 export type WslNetworkDiagnostics =
   | { status: 'ok'; addresses: string[]; gateway: string | null; dnsServers: string[]; configuredMode: string | null }
@@ -89,6 +90,7 @@ export type WslDiagnostics = {
   processes: WslReadings<WslProcess>;
   listeningPorts: WslReadings<WslListeningPort>;
   services: WslReadings<WslSystemService>;
+  mounts: WslReadings<WslMount>;
   network: WslNetworkDiagnostics;
   sampledAt: number;
 };

@@ -2,11 +2,13 @@ import { mountBadge, mountButton, mountSelect, mountTextField, type ButtonVarian
 import { format, type Messages } from '../i18n/messages.ts';
 import type { MonitorMessages } from '../i18n/monitor.ts';
 import { inspectWslConfig, type WslAction, type WslCatalog, type WslConfigDocument, type WslConfigTarget, type WslDiagnostics, type WslDistribution, type WslSnapshot } from '../shared/wsl.ts';
+import { withWslConfigSetting } from '../service/collectors/parse-wsl-conf.ts';
 import { element } from '../frame/ui.ts';
 
 type ConfirmableAction = Extract<WslAction, { action: 'unregister' | 'shutdown' | 'force-shutdown' | 'set-version' | 'compact' | 'move' | 'resize' | 'clone' | 'rename' | 'set-default-user' | 'set-default-version' | 'update-wsl' }>;
 
 const fieldDrafts = new Map<string, string>();
+const configSettingDrafts = new Map<string, string>();
 let selectedWslDistro: string | null = null;
 let selectedImportVersion: 1 | 2 = 2;
 let distroSearch = '';
@@ -271,6 +273,16 @@ const distroCard = (options: WslPanelOptions, distro: WslDistribution): HTMLElem
         line.append(element('span', 'value', `${listening.protocol.toUpperCase()} ${listening.port}`), element('span', 'muted', owner));
         diagnosticsView.append(line);
       }
+      diagnosticsView.append(element('h4', 'card-title wsl-detail-heading', options.tm.wslMounts));
+      if (diagnostics.mounts.status === 'unavailable') diagnosticsView.append(element('div', 'caption', options.tm.wslMountsUnavailable));
+      else if (diagnostics.mounts.items.length === 0) diagnosticsView.append(element('div', 'caption', options.tm.wslMountsUnavailable));
+      else {
+        const mountRows = element('div', 'wsl-detail-grid');
+        for (const mount of diagnostics.mounts.items) {
+          row(mountRows, mount.target, `${mount.source} · ${mount.fileSystem}`);
+        }
+        diagnosticsView.append(mountRows);
+      }
       diagnosticsView.append(element('h4', 'card-title wsl-detail-heading', options.tm.wslServices));
       if (diagnostics.services.status === 'unavailable') diagnosticsView.append(element('div', 'caption', diagnostics.services.reason));
       else if (diagnostics.services.items.length === 0) diagnosticsView.append(element('div', 'caption', options.tm.noWslServices));
@@ -443,7 +455,54 @@ export const renderWslView = (options: WslPanelOptions): HTMLElement => {
     };
     renderInsights(fieldDrafts.get(configKey) ?? options.config.text);
     configCard.append(insightHeading, insightSummary, bootWarning, networkWarning);
-    const value = textArea(configCard, configKey, configTarget.kind === 'global' ? '.wslconfig' : '/etc/wsl.conf', options.config.text, renderInsights);
+    const advanced = element('details', 'wsl-config-advanced');
+    advanced.append(element('summary', 'card-title', options.tm.configAdvanced));
+    const value = textArea(advanced, configKey, configTarget.kind === 'global' ? '.wslconfig' : '/etc/wsl.conf', options.config.text, renderInsights);
+    const guided = element('details', 'wsl-config-guided');
+    guided.append(element('summary', 'card-title', options.tm.configGuided));
+    const known = new Map(inspectWslConfig(options.config.text).insights.map(({ section, key, value: setting }) => [`${section}.${key}`, setting]));
+    const settings = configTarget.kind === 'global'
+      ? [
+        { section: 'wsl2', key: 'memory', label: options.tm.configVmMemory, kind: 'text' as const },
+        { section: 'wsl2', key: 'processors', label: options.tm.configVmProcessors, kind: 'text' as const },
+        { section: 'wsl2', key: 'swap', label: options.tm.configVmSwap, kind: 'text' as const },
+        { section: 'wsl2', key: 'networkingMode', label: options.tm.configNetworkingMode, kind: 'select' as const, choices: ['', 'nat', 'mirrored', 'none', 'consomme'] },
+        { section: 'wsl2', key: 'dnsTunneling', label: options.tm.configDnsTunneling, kind: 'boolean' as const },
+        { section: 'wsl2', key: 'firewall', label: options.tm.configFirewall, kind: 'boolean' as const },
+        { section: 'wsl2', key: 'autoProxy', label: options.tm.configAutoProxy, kind: 'boolean' as const },
+        { section: 'wsl2', key: 'guiApplications', label: options.tm.configGuiApplications, kind: 'boolean' as const },
+        { section: 'wsl2', key: 'gpuSupport', label: options.tm.configGpuSupport, kind: 'boolean' as const },
+      ]
+      : [
+        { section: 'boot', key: 'systemd', label: options.tm.configSystemd, kind: 'boolean' as const },
+        { section: 'automount', key: 'enabled', label: options.tm.configAutoMount, kind: 'boolean' as const },
+        { section: 'automount', key: 'mountFstab', label: options.tm.configMountFstab, kind: 'boolean' as const },
+        { section: 'interop', key: 'enabled', label: options.tm.configInterop, kind: 'boolean' as const },
+        { section: 'interop', key: 'appendWindowsPath', label: options.tm.configWindowsPath, kind: 'boolean' as const },
+      ];
+    const guidedBody = element('div', 'wsl-fields');
+    for (const setting of settings) {
+      const path = `${setting.section}.${setting.key.toLocaleLowerCase()}`;
+      const draftKey = `${configKey}:${path}`;
+      const current = configSettingDrafts.get(draftKey) ?? known.get(path) ?? '';
+      const slot = element('div');
+      const choices = setting.kind === 'boolean' ? ['', 'true', 'false'] : setting.kind === 'select' ? setting.choices : null;
+      if (choices) {
+        const selected = current === '' ? '__unchanged__' : current.toLocaleLowerCase();
+        mountSelect(slot, {
+          label: setting.label,
+          value: selected,
+          options: choices.map((choice) => ({ id: choice === '' ? '__unchanged__' : choice, label: choice === '' ? options.tm.configNoChange : choice })),
+          onChange: (next) => { configSettingDrafts.set(draftKey, next === '__unchanged__' ? '' : next); },
+        });
+      } else {
+        mountTextField(slot, { label: setting.label, value: current, placeholder: options.tm.configNoChange, mono: true, onChange: (next) => { configSettingDrafts.set(draftKey, next.trim()); } });
+      }
+      guidedBody.append(slot);
+    }
+    guided.append(guidedBody);
+    configCard.append(guided);
+    configCard.append(advanced);
     actionButton(configCard, options.tm.saveConfig, () => {
       const expected = configTarget.kind === 'global' ? 'SAVE GLOBAL WSL CONFIG' : `SAVE WSL CONFIG ${configTarget.distro}`;
       exactConfirm({
@@ -451,7 +510,16 @@ export const renderWslView = (options: WslPanelOptions): HTMLElement => {
         body: options.tm.configNotice,
         expected,
         tm: options.tm,
-        action: (confirmation) => ({ target: configTarget, text: value(), confirmation }),
+        action: (confirmation) => {
+          let text = value();
+          for (const setting of settings) {
+            const path = `${setting.section}.${setting.key.toLocaleLowerCase()}`;
+            const draft = configSettingDrafts.get(`${configKey}:${path}`);
+            if (draft === undefined || draft === '') continue;
+            text = withWslConfigSetting(text, setting.section, setting.key, draft);
+          }
+          return { target: configTarget, text, confirmation };
+        },
         onAction: ({ target, text }) => options.onSaveConfig(target, text),
       });
     }, options.busy || options.configLoading, 'default');

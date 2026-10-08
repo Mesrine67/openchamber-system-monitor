@@ -1,17 +1,18 @@
 import { isIP } from 'node:net';
-import type { WslCatalogItem, WslDistribution, WslGpuStatus, WslListeningPort, WslNetworkDiagnostics, WslProcess, WslReadings, WslSystemService } from '../../shared/wsl.ts';
+import type { WslCatalogItem, WslDistribution, WslGpuStatus, WslListeningPort, WslMount, WslNetworkDiagnostics, WslProcess, WslReadings, WslSystemService } from '../../shared/wsl.ts';
 
 export type WslDiagnosticSections = {
   processes: WslReadings<WslProcess>;
   listeningPorts: WslReadings<WslListeningPort>;
   services: WslReadings<WslSystemService>;
+  mounts: WslReadings<WslMount>;
   network: WslNetworkDiagnostics;
 };
 
 /** Parses bounded output from the fixed, read-only WSL diagnostics probe. */
 export const parseWslDiagnostics = (input: string | Uint8Array): WslDiagnosticSections => {
   const text = decodeWslText(input);
-  const section = (name: 'PROCESSES' | 'PROCESSES_CPU' | 'PROCESSES_MEMORY' | 'PORTS' | 'SERVICES' | 'NETWORK'): string | null => {
+  const section = (name: 'PROCESSES' | 'PROCESSES_CPU' | 'PROCESSES_MEMORY' | 'PORTS' | 'SERVICES' | 'NETWORK' | 'MOUNTS'): string | null => {
     const marker = `__${name}__\n`;
     const start = text.indexOf(marker);
     if (start < 0) return null;
@@ -87,6 +88,31 @@ export const parseWslDiagnostics = (input: string | Uint8Array): WslDiagnosticSe
       }).filter((item, index, items) => items.findIndex((candidate) => candidate.unit === item.unit) === index).slice(0, 100),
     };
 
+  const mountsText = section('MOUNTS');
+  let mounts: WslReadings<WslMount>;
+  if (mountsText === null || mountsText === '__UNAVAILABLE__') {
+    mounts = { status: 'unavailable', reason: mountsText === '__UNAVAILABLE__' ? 'The findmnt utility is not available in this distribution.' : 'Mount data was not returned.', items: [] };
+  } else {
+    try {
+      const parsed: unknown = JSON.parse(mountsText);
+      const filesystems = typeof parsed === 'object' && parsed !== null && 'filesystems' in parsed
+        ? (parsed as { filesystems?: unknown }).filesystems : null;
+      const sanitize = (value: unknown): string | null => typeof value === 'string' && value.trim().length > 0
+        ? value.trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 256) || null : null;
+      const items = Array.isArray(filesystems) ? filesystems.flatMap((entry) => {
+        if (typeof entry !== 'object' || entry === null) return [];
+        const item = entry as Record<string, unknown>;
+        const source = sanitize(item.source);
+        const target = sanitize(item.target);
+        const fileSystem = sanitize(item.fstype);
+        return source && target && fileSystem ? [{ source, target, fileSystem }] : [];
+      }).slice(0, 100) : [];
+      mounts = { status: 'ok', items };
+    } catch {
+      mounts = { status: 'unavailable', reason: 'Mount data could not be parsed.', items: [] };
+    }
+  }
+
   const networkText = section('NETWORK');
   let addresses: string[] = [];
   let gateway: string | null = null;
@@ -110,7 +136,7 @@ export const parseWslDiagnostics = (input: string | Uint8Array): WslDiagnosticSe
   const network: WslNetworkDiagnostics = networkUnavailable
     ? { status: 'unavailable', reason: networkText === '__UNAVAILABLE__' ? 'The guest network tools are not available in this distribution.' : 'Network data was not returned by the guest probe.', addresses: [], gateway: null, dnsServers: [], configuredMode }
     : { status: 'ok', addresses, gateway, dnsServers, configuredMode };
-  return { processes, listeningPorts, services, network };
+  return { processes, listeningPorts, services, mounts, network };
 };
 
 export type WslRegistrationMetadata = {
