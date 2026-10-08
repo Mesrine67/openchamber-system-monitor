@@ -6,3 +6,7 @@ tcp 127.0.0.1:3000
 tcp [::]:22
 udp 0.0.0.0:5353
 udp 0.0.0.0:5353
+__NETWORK__
+ADDRESSES=172.30.144.20 fe80::215:5dff:fe00:1234 invalid
+GATEWAY=172.30.144.1
+DNS=10.255.255.254 2001:db8::53 malformed

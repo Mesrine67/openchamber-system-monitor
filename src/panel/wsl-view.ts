@@ -206,6 +206,13 @@ const distroCard = (options: WslPanelOptions, distro: WslDistribution): HTMLElem
         diagnosticsView.append(line);
       }
       diagnosticsView.append(element('h4', 'card-title wsl-detail-heading', options.tm.network));
+      if (diagnostics.network.status === 'unavailable') diagnosticsView.append(element('div', 'caption', options.tm.wslNetworkUnavailable));
+      else {
+        row(diagnosticsView, options.tm.wslConfiguredMode, diagnostics.network.configuredMode ?? options.t.notAvailable);
+        row(diagnosticsView, options.tm.wslAddresses, diagnostics.network.addresses.join(', ') || options.t.notAvailable);
+        row(diagnosticsView, options.tm.wslGateway, diagnostics.network.gateway);
+        row(diagnosticsView, options.tm.wslDnsServers, diagnostics.network.dnsServers.join(', ') || options.t.notAvailable);
+      }
       if (diagnostics.listeningPorts.status === 'unavailable') diagnosticsView.append(element('div', 'caption', diagnostics.listeningPorts.reason));
       else if (diagnostics.listeningPorts.items.length === 0) diagnosticsView.append(element('div', 'caption', options.tm.noListeningPorts));
       else for (const listening of diagnostics.listeningPorts.items) {

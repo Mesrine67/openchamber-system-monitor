@@ -44,6 +44,7 @@ export type MonitorMessages = {
   vmMemory: string; wsl2Required: string; gpuSupport: string; gpuAvailable: string; gpuUnavailable: string; directXGpu: string; cudaLibrary: string; nvidiaToolkit: string; cdiSpec: string; remoteDesktop: string;
   cloneDistro: string; renameDistro: string; cloneName: string; cloneLocation: string; cloneWarning: string; renameWarning: string; defaultDistro: string; cpuPerDistroUnavailable: string;
   wslDiagnostics: string; pid: string; cpu: string; memory: string; protocol: string; address: string; port: string; noListeningPorts: string; diagnosticsUnavailable: string;
+  wslAddresses: string; wslGateway: string; wslDnsServers: string; wslConfiguredMode: string; wslNetworkUnavailable: string;
 };
 
 const en: MonitorMessages = {
@@ -100,6 +101,7 @@ const en: MonitorMessages = {
   cloneDistro: 'Clone distribution', renameDistro: 'Rename distribution', cloneName: 'Clone name', cloneLocation: 'Clone installation folder', cloneWarning: 'This exports the source distribution and imports a copy under a new name. It can require substantial free disk space and may take a long time.', renameWarning: 'This creates and verifies a full copy under the new name, then unregisters the original. Keep enough free disk space. If removal fails, both distributions remain available.',
   defaultDistro: 'Default distribution', cpuPerDistroUnavailable: 'WSL does not expose reliable CPU usage per distribution.',
   wslDiagnostics: 'Processes and listening ports', pid: 'PID', cpu: 'CPU', memory: 'Memory', protocol: 'Protocol', address: 'Address', port: 'Port', noListeningPorts: 'No listening ports detected.', diagnosticsUnavailable: 'Diagnostics unavailable.',
+  wslAddresses: 'Distribution addresses', wslGateway: 'Default gateway', wslDnsServers: 'DNS servers', wslConfiguredMode: 'Configured network mode', wslNetworkUnavailable: 'Guest network details are unavailable; required Linux tools may be missing.',
 };
 
 const fr: MonitorMessages = {
@@ -156,6 +158,7 @@ const fr: MonitorMessages = {
   cloneDistro: 'Cloner la distribution', renameDistro: 'Renommer la distribution', cloneName: 'Nom de la copie', cloneLocation: 'Dossier d’installation de la copie', cloneWarning: 'La distribution source sera exportée puis importée sous un nouveau nom. L’opération peut demander beaucoup d’espace disque et durer longtemps.', renameWarning: 'Une copie complète sera créée et vérifiée avant la désinscription de l’originale. Prévois assez d’espace libre. En cas d’échec de suppression, les deux distributions restent disponibles.',
   defaultDistro: 'Distribution par défaut', cpuPerDistroUnavailable: 'WSL ne fournit pas de mesure CPU fiable pour chaque distribution.',
   wslDiagnostics: 'Processus et ports en écoute', pid: 'PID', cpu: 'CPU', memory: 'Mémoire', protocol: 'Protocole', address: 'Adresse', port: 'Port', noListeningPorts: 'Aucun port en écoute détecté.', diagnosticsUnavailable: 'Diagnostic indisponible.',
+  wslAddresses: 'Adresses de la distribution', wslGateway: 'Passerelle par défaut', wslDnsServers: 'Serveurs DNS', wslConfiguredMode: 'Mode réseau configuré', wslNetworkUnavailable: 'Les informations réseau de l’invité sont indisponibles ; des outils Linux requis sont peut-être absents.',
 };
 
 const partial: Partial<Record<string, Partial<MonitorMessages>>> = {

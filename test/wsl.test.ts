@@ -41,6 +41,10 @@ describe('WSL parser', () => {
         { protocol: 'tcp', address: '[::]', port: 22 },
         { protocol: 'udp', address: '0.0.0.0', port: 5353 },
       ] },
+      network: {
+        status: 'ok', addresses: ['172.30.144.20', 'fe80::215:5dff:fe00:1234'], gateway: '172.30.144.1',
+        dnsServers: ['10.255.255.254', '2001:db8::53'], configuredMode: null,
+      },
     });
   });
 
@@ -48,7 +52,13 @@ describe('WSL parser', () => {
     expect(parseWslDiagnostics('__PROCESSES__\n__UNAVAILABLE__\n__PORTS__\ntcp 0.0.0.0:99999\n')).toEqual({
       processes: { status: 'unavailable', reason: 'The ps utility is not available in this distribution.', items: [] },
       listeningPorts: { status: 'ok', items: [] },
+      network: { status: 'unavailable', reason: 'Network data was not returned by the guest probe.', addresses: [], gateway: null, dnsServers: [], configuredMode: null },
     });
+  });
+
+  test('keeps valid WSL addresses and DNS when optional gateway is absent', () => {
+    expect(parseWslDiagnostics('__PROCESSES__\n__UNAVAILABLE__\n__PORTS__\n__UNAVAILABLE__\n__NETWORK__\nADDRESSES=192.168.1.12\nGATEWAY=unknown\nDNS=192.168.1.1\n').network)
+      .toEqual({ status: 'ok', addresses: ['192.168.1.12'], gateway: null, dnsServers: ['192.168.1.1'], configuredMode: null });
   });
 
   test('reads English distribution list with default, state and WSL version', async () => {

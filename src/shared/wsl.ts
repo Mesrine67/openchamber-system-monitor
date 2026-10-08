@@ -80,10 +80,14 @@ export type WslCatalog = { supported: boolean; items: WslCatalogItem[]; error: s
 export type WslProcess = { pid: number; name: string; cpuPercent: number | null; memoryPercent: number | null };
 export type WslListeningPort = { protocol: 'tcp' | 'udp'; address: string; port: number };
 export type WslReadings<T> = { status: 'ok'; items: T[] } | { status: 'unavailable'; reason: string; items: [] };
+export type WslNetworkDiagnostics =
+  | { status: 'ok'; addresses: string[]; gateway: string | null; dnsServers: string[]; configuredMode: string | null }
+  | { status: 'unavailable'; reason: string; addresses: []; gateway: null; dnsServers: []; configuredMode: string | null };
 export type WslDiagnostics = {
   distro: string;
   processes: WslReadings<WslProcess>;
   listeningPorts: WslReadings<WslListeningPort>;
+  network: WslNetworkDiagnostics;
   sampledAt: number;
 };
 

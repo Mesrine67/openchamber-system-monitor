@@ -4,6 +4,7 @@ import { lstat, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { WslAction, WslActionResult, WslCatalog, WslConfigDocument, WslConfigUpdate, WslDiagnostics, WslDistribution, WslSnapshot } from '../shared/wsl.ts';
+import { inspectWslConfig } from '../shared/wsl.ts';
 import { decodeWslText, parseWslCatalog, parseWslDefaultVersion, parseWslDiagnostics, parseWslDistroDetails, parseWslList, parseWslRegistrationMetadata, parseWslVersions } from './collectors/parse-wsl.ts';
 import { withDefaultWslUser } from './collectors/parse-wsl-conf.ts';
 import { runPowerShell } from './collectors/windows.ts';
@@ -140,10 +141,25 @@ export const readWslDiagnostics = async (name: string): Promise<WslDiagnostics> 
   const probe = [
     'printf "__PROCESSES__\\n"; if command -v ps >/dev/null 2>&1; then ps -eo pid=,comm=,%cpu=,%mem= 2>/dev/null | awk \'$2 != "sh" && $2 != "ps" && $2 != "awk" && $2 != "sort" && $2 != "head"\' | sort -k3,3nr | head -n 10; else printf "__UNAVAILABLE__\\n"; fi',
     'printf "__PORTS__\\n"; if command -v ss >/dev/null 2>&1; then ss -H -lntu 2>/dev/null | awk \'{print $1 " " $5}\' | head -n 100; else printf "__UNAVAILABLE__\\n"; fi',
+    'printf "__NETWORK__\\n"; if command -v ip >/dev/null 2>&1; then printf "ADDRESSES="; hostname -I 2>/dev/null || true; printf "\\nGATEWAY="; ip -4 route show default 2>/dev/null | awk \'NR == 1 {for (i=1;i<NF;i++) if ($i == "via") {print $(i+1); exit}}\'; printf "DNS="; awk \'$1 == "nameserver" {print $2}\' /etc/resolv.conf 2>/dev/null | head -n 8 | tr "\\n" " "; else printf "__UNAVAILABLE__\\n"; fi',
   ].join('; ');
   const result = await runWsl(['--distribution', distro.name, '--exec', 'sh', '-c', probe], 10_000);
   if (!result.ok) throw new Error(result.error);
-  return { distro: distro.name, ...parseWslDiagnostics(result.stdout), sampledAt: Date.now() };
+  const parsed = parseWslDiagnostics(result.stdout);
+  let configuredMode: string | null = null;
+  try {
+    const config = await readWslConfig('global');
+    if (config.exists) configuredMode = inspectWslConfig(config.text).insights
+      .find((setting) => setting.section === 'wsl2' && setting.key === 'networkingmode')?.value ?? null;
+  } catch {
+    // Network readings remain useful when the optional host config file cannot be read.
+  }
+  return {
+    distro: distro.name,
+    ...parsed,
+    network: { ...parsed.network, configuredMode },
+    sampledAt: Date.now(),
+  };
 };
 
 let catalogCache: { expiresAt: number; value: WslCatalog } | null = null;

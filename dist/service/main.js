@@ -2259,6 +2259,62 @@ var createSampler = (deps) => {
 };
 
 // src/shared/wsl.ts
+var inspectWslConfig = (text) => {
+  let section = "";
+  const settings = new Map;
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith(";"))
+      continue;
+    const heading = /^\[([^\]]+)\]$/.exec(trimmed);
+    if (heading) {
+      section = heading[1].trim().toLocaleLowerCase();
+      continue;
+    }
+    const assignment = /^([A-Za-z][A-Za-z0-9]*)\s*=\s*(.*?)\s*$/.exec(trimmed);
+    if (!assignment)
+      continue;
+    const key = assignment[1].toLocaleLowerCase();
+    const value = assignment[2].replace(/^(["'])(.*)\1$/, "$2").trim();
+    settings.set(`${section}.${key}`, value);
+  }
+  const visible = new Set([
+    "wsl2.memory",
+    "wsl2.processors",
+    "wsl2.swap",
+    "wsl2.networkingmode",
+    "wsl2.localhostforwarding",
+    "wsl2.dnstunneling",
+    "wsl2.autoproxy",
+    "wsl2.guiapplications",
+    "wsl2.gpusupport",
+    "wsl2.nestedvirtualization",
+    "wsl2.debugconsole",
+    "wsl2.vmidletimeout",
+    "experimental.sparsevhd",
+    "experimental.besteffortdnsparsing",
+    "experimental.automemoryreclaim",
+    "general.instanceidletimeout",
+    "boot.systemd",
+    "boot.command",
+    "automount.enabled",
+    "automount.mountfstab",
+    "interop.enabled",
+    "interop.appendwindowspath",
+    "network.generatehosts",
+    "network.generateresolvconf",
+    "user.default"
+  ]);
+  const insights = [...settings].filter(([path]) => visible.has(path)).map(([path, value]) => {
+    const [sectionName, key] = path.split(".");
+    return { section: sectionName, key, value };
+  });
+  return {
+    insights,
+    hasBootCommand: Boolean(settings.get("boot.command")?.trim()),
+    networkingDisabled: settings.get("wsl2.networkingmode")?.toLocaleLowerCase() === "none"
+  };
+};
 var safeDistroName = (value) => typeof value === "string" && value.trim().length > 0 && value.length <= 128 && !/[\u0000-\u001f\u007f/\\]/.test(value) && !value.startsWith("-");
 var safeWindowsPath = (value) => {
   if (typeof value !== "string" || value.length <= 3 || value.length > 240 || !/^[A-Za-z]:\\/.test(value) || /[\u0000-\u001f\u007f"<>|?*]/.test(value))
@@ -2344,6 +2400,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 // src/service/collectors/parse-wsl.ts
+import { isIP } from "node:net";
 var parseWslDiagnostics = (input) => {
   const text = decodeWslText(input);
   const section = (name) => {
@@ -2386,7 +2443,34 @@ var parseWslDiagnostics = (input) => {
       return [{ protocol: match[1].toLowerCase(), address: match[2].slice(0, 80), port }];
     }).filter((item, index, items) => items.findIndex((candidate) => candidate.protocol === item.protocol && candidate.address === item.address && candidate.port === item.port) === index).slice(0, 100)
   };
-  return { processes, listeningPorts };
+  const networkText = section("NETWORK");
+  let addresses = [];
+  let gateway = null;
+  let dnsServers = [];
+  let configuredMode = null;
+  let networkUnavailable = networkText === null || networkText === "__UNAVAILABLE__";
+  if (!networkUnavailable && networkText !== null) {
+    for (const line of networkText.split(`
+`)) {
+      const separator = line.indexOf("=");
+      if (separator < 0)
+        continue;
+      const key = line.slice(0, separator).trim();
+      const value = line.slice(separator + 1).trim();
+      if (key === "ADDRESSES")
+        addresses = value.split(/\s+/).filter((item) => isIP(item) !== 0).slice(0, 16);
+      if (key === "GATEWAY" && isIP(value) !== 0)
+        gateway = value;
+      if (key === "DNS")
+        dnsServers = value.split(/\s+/).filter((item) => isIP(item) !== 0).slice(0, 8);
+      if (key === "MODE" && /^[a-z][a-z0-9_-]{0,31}$/i.test(value))
+        configuredMode = value;
+    }
+    networkUnavailable = !networkText.split(`
+`).some((line) => line.startsWith("ADDRESSES="));
+  }
+  const network = networkUnavailable ? { status: "unavailable", reason: networkText === "__UNAVAILABLE__" ? "The guest network tools are not available in this distribution." : "Network data was not returned by the guest probe.", addresses: [], gateway: null, dnsServers: [], configuredMode } : { status: "ok", addresses, gateway, dnsServers, configuredMode };
+  return { processes, listeningPorts, network };
 };
 var decodeWslText = (input) => {
   if (typeof input === "string")
@@ -2742,12 +2826,25 @@ var readWslDiagnostics = async (name) => {
   }
   const probe = [
     `printf "__PROCESSES__\\n"; if command -v ps >/dev/null 2>&1; then ps -eo pid=,comm=,%cpu=,%mem= 2>/dev/null | awk '$2 != "sh" && $2 != "ps" && $2 != "awk" && $2 != "sort" && $2 != "head"' | sort -k3,3nr | head -n 10; else printf "__UNAVAILABLE__\\n"; fi`,
-    `printf "__PORTS__\\n"; if command -v ss >/dev/null 2>&1; then ss -H -lntu 2>/dev/null | awk '{print $1 " " $5}' | head -n 100; else printf "__UNAVAILABLE__\\n"; fi`
+    `printf "__PORTS__\\n"; if command -v ss >/dev/null 2>&1; then ss -H -lntu 2>/dev/null | awk '{print $1 " " $5}' | head -n 100; else printf "__UNAVAILABLE__\\n"; fi`,
+    `printf "__NETWORK__\\n"; if command -v ip >/dev/null 2>&1; then printf "ADDRESSES="; hostname -I 2>/dev/null || true; printf "\\nGATEWAY="; ip -4 route show default 2>/dev/null | awk 'NR == 1 {for (i=1;i<NF;i++) if ($i == "via") {print $(i+1); exit}}'; printf "DNS="; awk '$1 == "nameserver" {print $2}' /etc/resolv.conf 2>/dev/null | head -n 8 | tr "\\n" " "; else printf "__UNAVAILABLE__\\n"; fi`
   ].join("; ");
   const result = await runWsl(["--distribution", distro.name, "--exec", "sh", "-c", probe], 1e4);
   if (!result.ok)
     throw new Error(result.error);
-  return { distro: distro.name, ...parseWslDiagnostics(result.stdout), sampledAt: Date.now() };
+  const parsed = parseWslDiagnostics(result.stdout);
+  let configuredMode = null;
+  try {
+    const config = await readWslConfig("global");
+    if (config.exists)
+      configuredMode = inspectWslConfig(config.text).insights.find((setting) => setting.section === "wsl2" && setting.key === "networkingmode")?.value ?? null;
+  } catch {}
+  return {
+    distro: distro.name,
+    ...parsed,
+    network: { ...parsed.network, configuredMode },
+    sampledAt: Date.now()
+  };
 };
 var catalogCache = null;
 var readWslCatalog = async (force = false) => {

@@ -14,6 +14,8 @@ The Windows-only WSL manager is an opt-in tab in the rail/page panel. It is sepa
 
 When a WSL config file is opened, the editor remains the source of truth and preserves unknown settings. A read-only parser surfaces a small allowlist of documented, high-value settings and warns about a custom `[boot] command` or `networkingMode=none`; it does not reinterpret or rewrite the file. WSL configuration changes are applied by WSL at startup, so the UI must explain that saving a file does not itself reload the WSL VM. See Microsoft's [WSL configuration reference](https://learn.microsoft.com/en-us/windows/wsl/wsl-config).
 
+On-demand WSL 2 diagnostics also read the guest's local addresses, IPv4 default gateway and configured DNS servers using fixed Linux utility invocations. The configured `.wslconfig` networking mode is labeled as configured, not effective; no connectivity checks or port scans are implied. NAT and mirrored modes differ in localhost behavior, as described in Microsoft's [WSL networking guidance](https://learn.microsoft.com/en-us/windows/wsl/networking).
+
 These decisions follow the official [extension guide](https://docs.openchamber.dev/extensions/), [SDK overview](https://docs.openchamber.dev/sdk/), [host API](https://docs.openchamber.dev/sdk/host/), and [UI Kit](https://docs.openchamber.dev/sdk/ui/). In particular, a contributed page is discovered by the host's Extension pages menu, storage is provided by the host, and the panel itself remains a sandboxed UI surface.
 
 ## Data ownership and contracts

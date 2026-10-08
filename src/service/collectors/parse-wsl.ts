@@ -1,14 +1,16 @@
-import type { WslCatalogItem, WslDistribution, WslGpuStatus, WslListeningPort, WslProcess, WslReadings } from '../../shared/wsl.ts';
+import { isIP } from 'node:net';
+import type { WslCatalogItem, WslDistribution, WslGpuStatus, WslListeningPort, WslNetworkDiagnostics, WslProcess, WslReadings } from '../../shared/wsl.ts';
 
 export type WslDiagnosticSections = {
   processes: WslReadings<WslProcess>;
   listeningPorts: WslReadings<WslListeningPort>;
+  network: WslNetworkDiagnostics;
 };
 
 /** Parses bounded output from the fixed, read-only WSL diagnostics probe. */
 export const parseWslDiagnostics = (input: string | Uint8Array): WslDiagnosticSections => {
   const text = decodeWslText(input);
-  const section = (name: 'PROCESSES' | 'PORTS'): string | null => {
+  const section = (name: 'PROCESSES' | 'PORTS' | 'NETWORK'): string | null => {
     const marker = `__${name}__\n`;
     const start = text.indexOf(marker);
     if (start < 0) return null;
@@ -46,7 +48,31 @@ export const parseWslDiagnostics = (input: string | Uint8Array): WslDiagnosticSe
       }).filter((item, index, items) => items.findIndex((candidate) => candidate.protocol === item.protocol
         && candidate.address === item.address && candidate.port === item.port) === index).slice(0, 100),
     }) as WslReadings<WslListeningPort>;
-  return { processes, listeningPorts };
+
+  const networkText = section('NETWORK');
+  let addresses: string[] = [];
+  let gateway: string | null = null;
+  let dnsServers: string[] = [];
+  let configuredMode: string | null = null;
+  let networkUnavailable = networkText === null || networkText === '__UNAVAILABLE__';
+  if (!networkUnavailable && networkText !== null) {
+    for (const line of networkText.split('\n')) {
+      const separator = line.indexOf('=');
+      if (separator < 0) continue;
+      const key = line.slice(0, separator).trim();
+      const value = line.slice(separator + 1).trim();
+      if (key === 'ADDRESSES') addresses = value.split(/\s+/).filter((item) => isIP(item) !== 0).slice(0, 16);
+      if (key === 'GATEWAY' && isIP(value) !== 0) gateway = value;
+      if (key === 'DNS') dnsServers = value.split(/\s+/).filter((item) => isIP(item) !== 0).slice(0, 8);
+      if (key === 'MODE' && /^[a-z][a-z0-9_-]{0,31}$/i.test(value)) configuredMode = value;
+    }
+    // A missing address marker means the guest probe did not return enough network data.
+    networkUnavailable = !networkText.split('\n').some((line) => line.startsWith('ADDRESSES='));
+  }
+  const network: WslNetworkDiagnostics = networkUnavailable
+    ? { status: 'unavailable', reason: networkText === '__UNAVAILABLE__' ? 'The guest network tools are not available in this distribution.' : 'Network data was not returned by the guest probe.', addresses: [], gateway: null, dnsServers: [], configuredMode }
+    : { status: 'ok', addresses, gateway, dnsServers, configuredMode };
+  return { processes, listeningPorts, network };
 };
 
 export type WslRegistrationMetadata = {
