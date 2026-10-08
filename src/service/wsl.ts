@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { lstat, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { WslAction, WslActionResult, WslCatalog, WslConfigDocument, WslConfigUpdate, WslDistribution, WslSnapshot } from '../shared/wsl.ts';
-import { decodeWslText, parseWslCatalog, parseWslDefaultVersion, parseWslDistroDetails, parseWslList, parseWslRegistrationMetadata, parseWslVersions } from './collectors/parse-wsl.ts';
+import type { WslAction, WslActionResult, WslCatalog, WslConfigDocument, WslConfigUpdate, WslDiagnostics, WslDistribution, WslSnapshot } from '../shared/wsl.ts';
+import { decodeWslText, parseWslCatalog, parseWslDefaultVersion, parseWslDiagnostics, parseWslDistroDetails, parseWslList, parseWslRegistrationMetadata, parseWslVersions } from './collectors/parse-wsl.ts';
 import { withDefaultWslUser } from './collectors/parse-wsl-conf.ts';
 import { runPowerShell } from './collectors/windows.ts';
 
@@ -126,6 +126,24 @@ export const readWslSnapshot = async (): Promise<WslSnapshot> => {
     sampledAt: Date.now(),
     error: versionResult.ok ? null : versionResult.error,
   };
+};
+
+/** Collects bounded, read-only diagnostics only for a running WSL 2 distribution. */
+export const readWslDiagnostics = async (name: string): Promise<WslDiagnostics> => {
+  if (process.platform !== 'win32') throw new Error('Le service OpenChamber doit tourner sur Windows pour diagnostiquer WSL.');
+  if (!knownName(name)) throw new Error('Nom de distribution invalide.');
+  const snapshot = await readWslSnapshot();
+  const distro = snapshot.distributions.find((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+  if (!distro || distro.state !== 'running' || distro.version !== 2) {
+    throw new Error('Sélectionne une distribution WSL 2 en cours d’exécution.');
+  }
+  const probe = [
+    'printf "__PROCESSES__\\n"; if command -v ps >/dev/null 2>&1; then ps -eo pid=,comm=,%cpu=,%mem= 2>/dev/null | awk \'$2 != "sh" && $2 != "ps" && $2 != "awk" && $2 != "sort" && $2 != "head"\' | sort -k3,3nr | head -n 10; else printf "__UNAVAILABLE__\\n"; fi',
+    'printf "__PORTS__\\n"; if command -v ss >/dev/null 2>&1; then ss -H -lntu 2>/dev/null | awk \'{print $1 " " $5}\' | head -n 100; else printf "__UNAVAILABLE__\\n"; fi',
+  ].join('; ');
+  const result = await runWsl(['--distribution', distro.name, '--exec', 'sh', '-c', probe], 10_000);
+  if (!result.ok) throw new Error(result.error);
+  return { distro: distro.name, ...parseWslDiagnostics(result.stdout), sampledAt: Date.now() };
 };
 
 let catalogCache: { expiresAt: number; value: WslCatalog } | null = null;

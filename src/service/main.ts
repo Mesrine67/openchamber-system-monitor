@@ -17,7 +17,7 @@ import { currentPlatform, detectContainer } from './env.ts';
 import { createSampler } from './sampler.ts';
 import { DEFAULT_MONITOR_SETTINGS, normalizeMonitorSettings, type MonitorSettings } from '../shared/stats.ts';
 import { parseWslAction, parseWslConfigUpdate, type WslJob } from '../shared/wsl.ts';
-import { readWslCatalog, readWslConfig, readWslSnapshot, runWslAction, saveWslConfig } from './wsl.ts';
+import { readWslCatalog, readWslConfig, readWslDiagnostics, readWslSnapshot, runWslAction, saveWslConfig } from './wsl.ts';
 
 const port = Number(process.env.OPENCHAMBER_SERVICE_PORT);
 const token = process.env.OPENCHAMBER_SERVICE_TOKEN ?? '';
@@ -122,6 +122,14 @@ const server = http.createServer((req, res) => {
     readWslSnapshot().then(
       (snapshot) => send(res, 200, snapshot),
       () => send(res, 503, { error: 'wsl-unavailable' }),
+    );
+    return;
+  }
+  if (pathname === '/wsl/diagnostics' && req.method === 'GET') {
+    const distro = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('distro') ?? '';
+    readWslDiagnostics(distro).then(
+      (diagnostics) => send(res, 200, diagnostics),
+      (error: unknown) => send(res, 400, { error: error instanceof Error ? error.message : 'WSL diagnostics unavailable.' }),
     );
     return;
   }

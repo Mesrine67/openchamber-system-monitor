@@ -38,6 +38,7 @@ export type MonitorMessages = {
   sourceFilter: string; source: string; storeSource: string; importedSource: string; unknownSource: string; virtualDiskSize: string;
   vmMemory: string; wsl2Required: string; gpuSupport: string; gpuAvailable: string; gpuUnavailable: string; directXGpu: string; cudaLibrary: string; nvidiaToolkit: string; cdiSpec: string; remoteDesktop: string;
   cloneDistro: string; renameDistro: string; cloneName: string; cloneLocation: string; cloneWarning: string; renameWarning: string; defaultDistro: string; cpuPerDistroUnavailable: string;
+  wslDiagnostics: string; pid: string; cpu: string; memory: string; protocol: string; address: string; port: string; noListeningPorts: string; diagnosticsUnavailable: string;
 };
 
 const en: MonitorMessages = {
@@ -89,6 +90,7 @@ const en: MonitorMessages = {
   vmMemory: 'Shared WSL VM memory', wsl2Required: 'This operation requires a WSL 2 distribution.', gpuSupport: 'WSL GPU support', gpuAvailable: 'Available', gpuUnavailable: 'Not available', directXGpu: 'DirectX GPU device', cudaLibrary: 'NVIDIA CUDA library', nvidiaToolkit: 'NVIDIA Container Toolkit', cdiSpec: 'NVIDIA CDI spec', remoteDesktop: 'Open xrdp desktop',
   cloneDistro: 'Clone distribution', renameDistro: 'Rename distribution', cloneName: 'Clone name', cloneLocation: 'Clone installation folder', cloneWarning: 'This exports the source distribution and imports a copy under a new name. It can require substantial free disk space and may take a long time.', renameWarning: 'This creates and verifies a full copy under the new name, then unregisters the original. Keep enough free disk space. If removal fails, both distributions remain available.',
   defaultDistro: 'Default distribution', cpuPerDistroUnavailable: 'WSL does not expose reliable CPU usage per distribution.',
+  wslDiagnostics: 'Processes and listening ports', pid: 'PID', cpu: 'CPU', memory: 'Memory', protocol: 'Protocol', address: 'Address', port: 'Port', noListeningPorts: 'No listening ports detected.', diagnosticsUnavailable: 'Diagnostics unavailable.',
 };
 
 const fr: MonitorMessages = {
@@ -140,6 +142,7 @@ const fr: MonitorMessages = {
   vmMemory: 'Mémoire de la VM WSL (partagée)', wsl2Required: 'Cette opération nécessite une distribution WSL 2.', gpuSupport: 'Prise en charge GPU WSL', gpuAvailable: 'Disponible', gpuUnavailable: 'Indisponible', directXGpu: 'Périphérique GPU DirectX', cudaLibrary: 'Bibliothèque NVIDIA CUDA', nvidiaToolkit: 'NVIDIA Container Toolkit', cdiSpec: 'Spécification NVIDIA CDI', remoteDesktop: 'Ouvrir le bureau xrdp',
   cloneDistro: 'Cloner la distribution', renameDistro: 'Renommer la distribution', cloneName: 'Nom de la copie', cloneLocation: 'Dossier d’installation de la copie', cloneWarning: 'La distribution source sera exportée puis importée sous un nouveau nom. L’opération peut demander beaucoup d’espace disque et durer longtemps.', renameWarning: 'Une copie complète sera créée et vérifiée avant la désinscription de l’originale. Prévois assez d’espace libre. En cas d’échec de suppression, les deux distributions restent disponibles.',
   defaultDistro: 'Distribution par défaut', cpuPerDistroUnavailable: 'WSL ne fournit pas de mesure CPU fiable pour chaque distribution.',
+  wslDiagnostics: 'Processus et ports en écoute', pid: 'PID', cpu: 'CPU', memory: 'Mémoire', protocol: 'Protocole', address: 'Adresse', port: 'Port', noListeningPorts: 'Aucun port en écoute détecté.', diagnosticsUnavailable: 'Diagnostic indisponible.',
 };
 
 const partial: Partial<Record<string, Partial<MonitorMessages>>> = {

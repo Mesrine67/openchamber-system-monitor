@@ -1,4 +1,53 @@
-import type { WslCatalogItem, WslDistribution, WslGpuStatus } from '../../shared/wsl.ts';
+import type { WslCatalogItem, WslDistribution, WslGpuStatus, WslListeningPort, WslProcess, WslReadings } from '../../shared/wsl.ts';
+
+export type WslDiagnosticSections = {
+  processes: WslReadings<WslProcess>;
+  listeningPorts: WslReadings<WslListeningPort>;
+};
+
+/** Parses bounded output from the fixed, read-only WSL diagnostics probe. */
+export const parseWslDiagnostics = (input: string | Uint8Array): WslDiagnosticSections => {
+  const text = decodeWslText(input);
+  const section = (name: 'PROCESSES' | 'PORTS'): string | null => {
+    const marker = `__${name}__\n`;
+    const start = text.indexOf(marker);
+    if (start < 0) return null;
+    const content = text.slice(start + marker.length);
+    const end = content.search(/\n__/);
+    return (end < 0 ? content : content.slice(0, end)).trim();
+  };
+  const processesText = section('PROCESSES');
+  const processes = (processesText === null || processesText === '__UNAVAILABLE__'
+    ? { status: 'unavailable', reason: processesText === null ? 'Process data was not returned.' : 'The ps utility is not available in this distribution.', items: [] }
+    : {
+      status: 'ok',
+      items: processesText.split('\n').flatMap((line) => {
+        const match = line.trim().match(/^(\d+)\s+(\S+)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/);
+        if (!match) return [];
+        const pid = Number(match[1]);
+        const cpuPercent = Number(match[3]);
+        const memoryPercent = Number(match[4]);
+        if (!Number.isSafeInteger(pid) || pid < 1 || !Number.isFinite(cpuPercent) || !Number.isFinite(memoryPercent)) return [];
+        return [{ pid, name: match[2]!.slice(0, 64), cpuPercent, memoryPercent }];
+      }).slice(0, 10),
+    }) as WslReadings<WslProcess>;
+
+  const portsText = section('PORTS');
+  const listeningPorts = (portsText === null || portsText === '__UNAVAILABLE__'
+    ? { status: 'unavailable', reason: portsText === null ? 'Network data was not returned.' : 'The ss utility is not available in this distribution.', items: [] }
+    : {
+      status: 'ok',
+      items: portsText.split('\n').flatMap((line) => {
+        const match = line.trim().match(/^(tcp|udp)\s+(.+):(\d+)$/i);
+        if (!match) return [];
+        const port = Number(match[3]);
+        if (!Number.isInteger(port) || port < 1 || port > 65_535) return [];
+        return [{ protocol: match[1]!.toLowerCase() as 'tcp' | 'udp', address: match[2]!.slice(0, 80), port }];
+      }).filter((item, index, items) => items.findIndex((candidate) => candidate.protocol === item.protocol
+        && candidate.address === item.address && candidate.port === item.port) === index).slice(0, 100),
+    }) as WslReadings<WslListeningPort>;
+  return { processes, listeningPorts };
+};
 
 export type WslRegistrationMetadata = {
   name: string;

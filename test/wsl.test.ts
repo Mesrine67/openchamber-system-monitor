@@ -1,10 +1,32 @@
 import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
-import { parseWslCatalog, parseWslDefaultVersion, parseWslDistroDetails, parseWslList, parseWslRegistrationMetadata, parseWslVersions } from '../src/service/collectors/parse-wsl.ts';
+import { parseWslCatalog, parseWslDefaultVersion, parseWslDiagnostics, parseWslDistroDetails, parseWslList, parseWslRegistrationMetadata, parseWslVersions } from '../src/service/collectors/parse-wsl.ts';
 import { withDefaultWslUser } from '../src/service/collectors/parse-wsl-conf.ts';
 import { parseWslAction, parseWslConfigUpdate } from '../src/shared/wsl.ts';
 
 describe('WSL parser', () => {
+  test('parses bounded process and listening-port diagnostics', async () => {
+    const fixture = await readFile(new URL('./fixtures/wsl-diagnostics.txt', import.meta.url), 'utf8');
+    expect(parseWslDiagnostics(fixture)).toEqual({
+      processes: { status: 'ok', items: [
+        { pid: 1842, name: 'node', cpuPercent: 12.5, memoryPercent: 4.8 },
+        { pid: 2010, name: 'python3', cpuPercent: 2, memoryPercent: 1.1 },
+      ] },
+      listeningPorts: { status: 'ok', items: [
+        { protocol: 'tcp', address: '127.0.0.1', port: 3000 },
+        { protocol: 'tcp', address: '[::]', port: 22 },
+        { protocol: 'udp', address: '0.0.0.0', port: 5353 },
+      ] },
+    });
+  });
+
+  test('keeps missing guest tools unavailable and drops malformed readings', () => {
+    expect(parseWslDiagnostics('__PROCESSES__\n__UNAVAILABLE__\n__PORTS__\ntcp 0.0.0.0:99999\n')).toEqual({
+      processes: { status: 'unavailable', reason: 'The ps utility is not available in this distribution.', items: [] },
+      listeningPorts: { status: 'ok', items: [] },
+    });
+  });
+
   test('reads English distribution list with default, state and WSL version', async () => {
     const fixture = await readFile(new URL('./fixtures/wsl-list-en.txt', import.meta.url), 'utf8');
     expect(parseWslList(fixture).map(({ name, state, version, isDefault }) => ({ name, state, version, isDefault }))).toEqual([

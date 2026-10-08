@@ -77,6 +77,16 @@ export type WslJob = {
 export type WslCatalogItem = { name: string; friendlyName: string };
 export type WslCatalog = { supported: boolean; items: WslCatalogItem[]; error: string | null };
 
+export type WslProcess = { pid: number; name: string; cpuPercent: number | null; memoryPercent: number | null };
+export type WslListeningPort = { protocol: 'tcp' | 'udp'; address: string; port: number };
+export type WslReadings<T> = { status: 'ok'; items: T[] } | { status: 'unavailable'; reason: string; items: [] };
+export type WslDiagnostics = {
+  distro: string;
+  processes: WslReadings<WslProcess>;
+  listeningPorts: WslReadings<WslListeningPort>;
+  sampledAt: number;
+};
+
 export type WslConfigTarget = { kind: 'global' } | { kind: 'distribution'; distro: string };
 export type WslConfigDocument = { target: WslConfigTarget; exists: boolean; text: string };
 export type WslConfigUpdate = WslConfigTarget & { text: string; confirmation: string };

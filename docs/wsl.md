@@ -8,6 +8,7 @@ System Monitor adds an optional WSL manager for Windows-hosted OpenChamber. It f
 | --- | --- |
 | Installed distributions | List, status, default, WSL version, install source, detected virtual-disk file size and guest OS/kernel details for running distributions. Search and filter by state, WSL version and source. |
 | Running guest readings | Root filesystem capacity, process count, and Windows GPU integration checks. xrdp is exposed only when a valid port is detected. Memory is shown once as shared WSL 2 VM memory when `free` is installed; it is not a per-distribution reading. CPU use per distribution remains unavailable because the WSL host API does not provide a reliable per-distro CPU measurement. |
+| On-demand guest diagnostics | For a running WSL 2 distribution, inspect up to ten process names with PID/CPU/memory percentages and up to 100 TCP/UDP listening sockets. Process command lines and user names are not collected. Missing `ps` or `ss` is reported as unavailable. No process control is exposed. |
 | Global WSL | Show WSL/kernel versions and default distro/version; load the official `wsl --list --online` catalog on request; update WSL, set the default version, and shut down after a typed confirmation. |
 | Distribution lifecycle | Start, stop, restart, set default, switch WSL 1/2 with a backup warning and typed confirmation, and open Terminal, Explorer, VS Code or detected xrdp. |
 | Install and backup | Install a selected entry from Microsoft's own online WSL catalog; import and export TAR archives; clone or rename through an export/import staging archive, checking destination paths and preserving recovery archives on failed imports. |
@@ -37,6 +38,7 @@ These omissions avoid arbitrary code installation/execution, admin elevation, du
 The panel calls only authenticated local service routes:
 
 - `GET /wsl`: installed distributions and live details for already-running distros.
+- `GET /wsl/diagnostics?distro=<name>`: bounded process and listening-port diagnostics for one already-running WSL 2 distribution.
 - `GET /wsl/catalog`: official WSL online distribution list; this network-backed Microsoft CLI command runs only after the user requests the catalog.
 - `GET /wsl/config`: read a supported global or per-distribution configuration file.
 - `POST /wsl/config`: save a bounded configuration after exact typed confirmation.

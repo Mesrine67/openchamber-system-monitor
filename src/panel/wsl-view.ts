@@ -1,7 +1,7 @@
 import { mountBadge, mountButton, mountSelect, mountTextField, type ButtonVariant } from '@openchamber/sdk/ui';
 import { format, type Messages } from '../i18n/messages.ts';
 import type { MonitorMessages } from '../i18n/monitor.ts';
-import type { WslAction, WslCatalog, WslConfigDocument, WslConfigTarget, WslDistribution, WslSnapshot } from '../shared/wsl.ts';
+import type { WslAction, WslCatalog, WslConfigDocument, WslConfigTarget, WslDiagnostics, WslDistribution, WslSnapshot } from '../shared/wsl.ts';
 import { element } from '../frame/ui.ts';
 
 type ConfirmableAction = Extract<WslAction, { action: 'unregister' | 'shutdown' | 'force-shutdown' | 'set-version' | 'compact' | 'move' | 'resize' | 'clone' | 'rename' | 'set-default-user' | 'set-default-version' | 'update-wsl' }>;
@@ -23,6 +23,8 @@ export type WslPanelOptions = {
   catalogLoading: boolean;
   config: WslConfigDocument | null;
   configLoading: boolean;
+  diagnostics: Record<string, WslDiagnostics | undefined>;
+  diagnosticsLoading: string | null;
   t: Messages;
   tm: MonitorMessages;
   locale: string;
@@ -31,6 +33,7 @@ export type WslPanelOptions = {
   onAction: (action: WslAction) => void;
   onLoadConfig: (target: WslConfigTarget) => void;
   onSaveConfig: (target: WslConfigTarget, text: string) => void;
+  onLoadDiagnostics: (distro: string) => void;
 };
 
 const byteText = (value: number | null, locale: string): string => value === null ? '—' : `${(value / 1_073_741_824).toLocaleString(locale, { maximumFractionDigits: 1 })} GB`;
@@ -186,6 +189,33 @@ const distroCard = (options: WslPanelOptions, distro: WslDistribution): HTMLElem
     row(detailGrid, options.tm.cdiSpec, state(distro.gpu.cdiSpec));
   }
   card.append(detailGrid);
+
+  if (distro.state === 'running' && distro.version === 2) {
+    const diagnostics = options.diagnostics[distro.name];
+    actionButton(card, options.diagnosticsLoading === distro.name ? options.tm.actionInProgress : options.tm.wslDiagnostics,
+      () => options.onLoadDiagnostics(distro.name), options.busy || options.diagnosticsLoading !== null, 'ghost');
+    if (diagnostics) {
+      const diagnosticsView = element('div', 'wsl-detail-grid');
+      diagnosticsView.setAttribute('aria-label', options.tm.wslDiagnostics);
+      diagnosticsView.append(element('h4', 'card-title wsl-detail-heading', options.tm.processes));
+      if (diagnostics.processes.status === 'unavailable') diagnosticsView.append(element('div', 'caption', diagnostics.processes.reason));
+      else if (diagnostics.processes.items.length === 0) diagnosticsView.append(element('div', 'caption', options.tm.noProcesses));
+      else for (const process of diagnostics.processes.items) {
+        const line = element('div', 'row');
+        line.append(element('span', 'value', process.name), element('span', 'muted', `${options.tm.pid} ${process.pid} · ${options.tm.cpu} ${process.cpuPercent?.toFixed(1) ?? '—'}% · ${options.tm.memory} ${process.memoryPercent?.toFixed(1) ?? '—'}%`));
+        diagnosticsView.append(line);
+      }
+      diagnosticsView.append(element('h4', 'card-title wsl-detail-heading', options.tm.network));
+      if (diagnostics.listeningPorts.status === 'unavailable') diagnosticsView.append(element('div', 'caption', diagnostics.listeningPorts.reason));
+      else if (diagnostics.listeningPorts.items.length === 0) diagnosticsView.append(element('div', 'caption', options.tm.noListeningPorts));
+      else for (const listening of diagnostics.listeningPorts.items) {
+        const line = element('div', 'row');
+        line.append(element('span', 'value', `${listening.protocol.toUpperCase()} ${listening.port}`), element('span', 'muted', listening.address));
+        diagnosticsView.append(line);
+      }
+      card.append(diagnosticsView);
+    }
+  }
 
   const actions = element('div', 'wsl-actions');
   const busy = options.busy || options.loading;

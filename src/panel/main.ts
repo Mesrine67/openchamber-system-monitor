@@ -12,7 +12,7 @@ import { startFrame, type FrameContext } from '../frame/host.ts';
 import { sparkline, sparklineFromValues, SPARKLINE_CSS } from '../frame/sparkline.ts';
 import { BASE_CSS, element, installStyle, toneFor } from '../frame/ui.ts';
 import { renderWslView } from './wsl-view.ts';
-import type { WslAction, WslCatalog, WslConfigDocument, WslConfigTarget, WslJob, WslSnapshot } from '../shared/wsl.ts';
+import type { WslAction, WslCatalog, WslConfigDocument, WslConfigTarget, WslDiagnostics, WslJob, WslSnapshot } from '../shared/wsl.ts';
 import {
   busiestGpu, DEFAULT_MONITOR_SETTINGS, diskPercent, fullestDisk, normalizeMonitorSettings,
   type MonitorSettings, type ProcessEntry, type Stats, type Warning,
@@ -73,6 +73,8 @@ let wslJobPollActive = false;
 let wslStatusMessage: string | null = null;
 let wslConfig: WslConfigDocument | null = null;
 let wslConfigLoading = false;
+const wslDiagnostics: Record<string, WslDiagnostics | undefined> = {};
+let wslDiagnosticsLoading: string | null = null;
 let wslRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const shell = element('div', 'shell');
@@ -624,6 +626,8 @@ const renderWslTab = (): void => {
     catalogLoading: wslCatalogLoading,
     config: wslConfig,
     configLoading: wslConfigLoading,
+    diagnostics: wslDiagnostics,
+    diagnosticsLoading: wslDiagnosticsLoading,
     t: current.t,
     tm: current.tm,
     locale: current.locale,
@@ -632,9 +636,28 @@ const renderWslTab = (): void => {
     onAction: (action) => { void runWslActionFromPanel(action); },
     onLoadConfig: (target) => { void loadWslConfig(target); },
     onSaveConfig: (target, text) => { void saveWslConfig(target, text); },
+    onLoadDiagnostics: (distro) => { void loadWslDiagnostics(distro); },
   });
   content.replaceChildren(view);
   renderedTab = 'wsl';
+};
+
+const loadWslDiagnostics = async (distro: string): Promise<void> => {
+  if (!current || activeTab !== 'wsl' || wslDiagnosticsLoading) return;
+  wslDiagnosticsLoading = distro;
+  renderWslTab();
+  try {
+    const query = new URLSearchParams({ distro });
+    const response = await current.host.serviceRequest({ method: 'GET', path: `/wsl/diagnostics?${query.toString()}` });
+    const result = JSON.parse(response.body) as WslDiagnostics | { error?: string };
+    if (response.status !== 200 || !('processes' in result)) throw new Error('error' in result ? result.error : current.tm.diagnosticsUnavailable);
+    wslDiagnostics[distro] = result;
+  } catch (error) {
+    wslStatusMessage = error instanceof Error ? error.message : current.tm.diagnosticsUnavailable;
+  } finally {
+    wslDiagnosticsLoading = null;
+    renderWslTab();
+  }
 };
 
 const loadWslConfig = async (target: WslConfigTarget): Promise<void> => {
