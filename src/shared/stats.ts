@@ -73,7 +73,7 @@ export type Disk = {
   used: number;
   total: number;
   fileSystem?: string | null;
-  driveType?: 'fixed' | 'removable' | null;
+  driveType?: 'fixed' | 'removable' | 'network' | null;
   /** Source device identifier, kept local and never included in diagnostic exports. */
   device?: string | null;
   deviceType?: 'ssd' | 'hdd' | 'nvme' | null;

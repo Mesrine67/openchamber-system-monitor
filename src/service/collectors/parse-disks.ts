@@ -81,7 +81,7 @@ export const linuxDisks = (rows: DfRow[], container: boolean): Disk[] => {
     .sort(byMount);
 };
 
-/** `Get-CimInstance Win32_LogicalDisk -Filter "DriveType=2 OR DriveType=3" | … | ConvertTo-Json`: an object for one disk, an array for more. */
+/** `Get-CimInstance Win32_LogicalDisk -Filter "DriveType=2 OR DriveType=3 OR DriveType=4" | … | ConvertTo-Json`: an object for one disk, an array for more. */
 export const parseWindowsDisks = (text: string): Disk[] | null => {
   let parsed: unknown;
   try {
@@ -107,7 +107,7 @@ export const parseWindowsDisks = (text: string): Disk[] | null => {
       total: size,
       device: mount,
       ...(typeof fileSystem === 'string' && fileSystem.trim() ? { fileSystem: fileSystem.trim() } : {}),
-      ...(driveType === 2 ? { driveType: 'removable' as const } : driveType === 3 ? { driveType: 'fixed' as const } : {}),
+      ...(driveType === 2 ? { driveType: 'removable' as const } : driveType === 3 ? { driveType: 'fixed' as const } : driveType === 4 ? { driveType: 'network' as const } : {}),
     });
   }
   return disks.sort(byMount);

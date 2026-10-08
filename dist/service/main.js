@@ -928,7 +928,7 @@ var parseWindowsDisks = (text) => {
       total: size,
       device: mount,
       ...typeof fileSystem === "string" && fileSystem.trim() ? { fileSystem: fileSystem.trim() } : {},
-      ...driveType === 2 ? { driveType: "removable" } : driveType === 3 ? { driveType: "fixed" } : {}
+      ...driveType === 2 ? { driveType: "removable" } : driveType === 3 ? { driveType: "fixed" } : driveType === 4 ? { driveType: "network" } : {}
     });
   }
   return disks.sort(byMount);
@@ -942,7 +942,7 @@ function byMount(left, right) {
 }
 
 // src/service/collectors/disks.ts
-var WINDOWS_DISKS = 'Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=2 OR DriveType=3" | Select-Object DeviceID, VolumeName, Size, FreeSpace, FileSystem, DriveType | ConvertTo-Json -Compress';
+var WINDOWS_DISKS = 'Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=2 OR DriveType=3 OR DriveType=4" | Select-Object DeviceID, VolumeName, Size, FreeSpace, FileSystem, DriveType | ConvertTo-Json -Compress';
 var WINDOWS_TIMEOUT_MS = 1e4;
 var DF = ["/bin/df", "/usr/bin/df", "df"];
 var deviceType = async (disk) => {

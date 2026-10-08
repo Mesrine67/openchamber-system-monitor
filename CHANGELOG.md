@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2 - 2026-10-08
+
+- Detect mapped Windows network volumes, including SSHFS drives, and show them with their network drive type.
+
 ## 1.1.1 - 2026-10-08
 
 - Rebuild committed extension bundles with Bun 1.4.2 to match the frozen lockfile and release CI.

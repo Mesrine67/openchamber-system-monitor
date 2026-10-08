@@ -1,0 +1,5 @@
+[
+  {"DeviceID":"C:","VolumeName":"Windows","Size":1000000000000,"FreeSpace":120000000000,"FileSystem":"NTFS","DriveType":3},
+  {"DeviceID":"X:","VolumeName":"Remote workspace","Size":500000000000,"FreeSpace":210000000000,"FileSystem":"FUSE-SSHFS","DriveType":4},
+  {"DeviceID":"Y:","VolumeName":"Archive share","Size":2000000000000,"FreeSpace":750000000000,"FileSystem":"FUSE-SSHFS","DriveType":4}
+]

@@ -219,6 +219,15 @@ describe('disks', () => {
     expect(parseWindowsDisks('')).toEqual([]);
     expect(parseWindowsDisks('{oops')).toBeNull();
   });
+
+  test('Windows includes mapped network volumes such as SSHFS', () => {
+    const disks = parseWindowsDisks(fixture('windows-disks-network.json'));
+    expect(disks?.map((disk) => [disk.mount, disk.driveType, disk.fileSystem])).toEqual([
+      ['C:', 'fixed', 'NTFS'],
+      ['X:', 'network', 'FUSE-SSHFS'],
+      ['Y:', 'network', 'FUSE-SSHFS'],
+    ]);
+  });
 });
 
 describe('windows environment', () => {
