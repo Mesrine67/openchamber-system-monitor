@@ -1,16 +1,17 @@
 import { isIP } from 'node:net';
-import type { WslCatalogItem, WslDistribution, WslGpuStatus, WslListeningPort, WslNetworkDiagnostics, WslProcess, WslReadings } from '../../shared/wsl.ts';
+import type { WslCatalogItem, WslDistribution, WslGpuStatus, WslListeningPort, WslNetworkDiagnostics, WslProcess, WslReadings, WslSystemService } from '../../shared/wsl.ts';
 
 export type WslDiagnosticSections = {
   processes: WslReadings<WslProcess>;
   listeningPorts: WslReadings<WslListeningPort>;
+  services: WslReadings<WslSystemService>;
   network: WslNetworkDiagnostics;
 };
 
 /** Parses bounded output from the fixed, read-only WSL diagnostics probe. */
 export const parseWslDiagnostics = (input: string | Uint8Array): WslDiagnosticSections => {
   const text = decodeWslText(input);
-  const section = (name: 'PROCESSES' | 'PROCESSES_CPU' | 'PROCESSES_MEMORY' | 'PORTS' | 'NETWORK'): string | null => {
+  const section = (name: 'PROCESSES' | 'PROCESSES_CPU' | 'PROCESSES_MEMORY' | 'PORTS' | 'SERVICES' | 'NETWORK'): string | null => {
     const marker = `__${name}__\n`;
     const start = text.indexOf(marker);
     if (start < 0) return null;
@@ -61,14 +62,30 @@ export const parseWslDiagnostics = (input: string | Uint8Array): WslDiagnosticSe
     : {
       status: 'ok',
       items: portsText.split('\n').flatMap((line) => {
-        const match = line.trim().match(/^(tcp|udp)\s+(.+):(\d+)$/i);
+        const match = line.trim().match(/^(tcp|udp)\s+(.+):(\d+)(?:\s+.*)?$/i);
         if (!match) return [];
         const port = Number(match[3]);
         if (!Number.isInteger(port) || port < 1 || port > 65_535) return [];
-        return [{ protocol: match[1]!.toLowerCase() as 'tcp' | 'udp', address: match[2]!.slice(0, 80), port }];
+        const owner = /users:\(\("([^"\r\n]{1,80})",pid=(\d+),fd=\d+\)/.exec(line);
+        const ownerPid = owner?.[2] ? Number(owner[2]) : NaN;
+        const processName = owner?.[1]?.trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 64) || null;
+        return [{ protocol: match[1]!.toLowerCase() as 'tcp' | 'udp', address: match[2]!.slice(0, 80), port,
+          processName, pid: Number.isSafeInteger(ownerPid) && ownerPid > 0 ? ownerPid : null }];
       }).filter((item, index, items) => items.findIndex((candidate) => candidate.protocol === item.protocol
-        && candidate.address === item.address && candidate.port === item.port) === index).slice(0, 100),
+        && candidate.address === item.address && candidate.port === item.port && candidate.pid === item.pid) === index).slice(0, 100),
     }) as WslReadings<WslListeningPort>;
+
+  const servicesText = section('SERVICES');
+  const services: WslReadings<WslSystemService> = servicesText === null || servicesText === '__UNAVAILABLE__'
+    ? { status: 'unavailable', reason: servicesText === null ? 'Service data was not returned.' : 'systemd is unavailable or not running in this distribution.', items: [] }
+    : {
+      status: 'ok',
+      items: servicesText.split('\n').flatMap((line) => {
+        const match = /^([A-Za-z0-9_.@:-]+\.service)\s+(loaded|not-found|masked|error)\s+(active|inactive|failed|activating|deactivating|reloading)\s+(running|exited|dead|failed|waiting|start|stop|auto-restart|condition)\s*(.*)$/.exec(line.trim());
+        if (!match) return [];
+        return [{ unit: match[1]!.slice(0, 128), loadState: match[2]!, activeState: match[3]!, subState: match[4]!, description: match[5]!.trim().slice(0, 240) || null }];
+      }).filter((item, index, items) => items.findIndex((candidate) => candidate.unit === item.unit) === index).slice(0, 100),
+    };
 
   const networkText = section('NETWORK');
   let addresses: string[] = [];
@@ -93,7 +110,7 @@ export const parseWslDiagnostics = (input: string | Uint8Array): WslDiagnosticSe
   const network: WslNetworkDiagnostics = networkUnavailable
     ? { status: 'unavailable', reason: networkText === '__UNAVAILABLE__' ? 'The guest network tools are not available in this distribution.' : 'Network data was not returned by the guest probe.', addresses: [], gateway: null, dnsServers: [], configuredMode }
     : { status: 'ok', addresses, gateway, dnsServers, configuredMode };
-  return { processes, listeningPorts, network };
+  return { processes, listeningPorts, services, network };
 };
 
 export type WslRegistrationMetadata = {

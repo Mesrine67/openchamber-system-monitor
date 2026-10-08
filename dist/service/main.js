@@ -2451,14 +2451,34 @@ var parseWslDiagnostics = (input) => {
     status: "ok",
     items: portsText.split(`
 `).flatMap((line) => {
-      const match = line.trim().match(/^(tcp|udp)\s+(.+):(\d+)$/i);
+      const match = line.trim().match(/^(tcp|udp)\s+(.+):(\d+)(?:\s+.*)?$/i);
       if (!match)
         return [];
       const port = Number(match[3]);
       if (!Number.isInteger(port) || port < 1 || port > 65535)
         return [];
-      return [{ protocol: match[1].toLowerCase(), address: match[2].slice(0, 80), port }];
-    }).filter((item, index, items) => items.findIndex((candidate) => candidate.protocol === item.protocol && candidate.address === item.address && candidate.port === item.port) === index).slice(0, 100)
+      const owner = /users:\(\("([^"\r\n]{1,80})",pid=(\d+),fd=\d+\)/.exec(line);
+      const ownerPid = owner?.[2] ? Number(owner[2]) : NaN;
+      const processName = owner?.[1]?.trim().replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 64) || null;
+      return [{
+        protocol: match[1].toLowerCase(),
+        address: match[2].slice(0, 80),
+        port,
+        processName,
+        pid: Number.isSafeInteger(ownerPid) && ownerPid > 0 ? ownerPid : null
+      }];
+    }).filter((item, index, items) => items.findIndex((candidate) => candidate.protocol === item.protocol && candidate.address === item.address && candidate.port === item.port && candidate.pid === item.pid) === index).slice(0, 100)
+  };
+  const servicesText = section("SERVICES");
+  const services = servicesText === null || servicesText === "__UNAVAILABLE__" ? { status: "unavailable", reason: servicesText === null ? "Service data was not returned." : "systemd is unavailable or not running in this distribution.", items: [] } : {
+    status: "ok",
+    items: servicesText.split(`
+`).flatMap((line) => {
+      const match = /^([A-Za-z0-9_.@:-]+\.service)\s+(loaded|not-found|masked|error)\s+(active|inactive|failed|activating|deactivating|reloading)\s+(running|exited|dead|failed|waiting|start|stop|auto-restart|condition)\s*(.*)$/.exec(line.trim());
+      if (!match)
+        return [];
+      return [{ unit: match[1].slice(0, 128), loadState: match[2], activeState: match[3], subState: match[4], description: match[5].trim().slice(0, 240) || null }];
+    }).filter((item, index, items) => items.findIndex((candidate) => candidate.unit === item.unit) === index).slice(0, 100)
   };
   const networkText = section("NETWORK");
   let addresses = [];
@@ -2487,7 +2507,7 @@ var parseWslDiagnostics = (input) => {
 `).some((line) => line.startsWith("ADDRESSES="));
   }
   const network = networkUnavailable ? { status: "unavailable", reason: networkText === "__UNAVAILABLE__" ? "The guest network tools are not available in this distribution." : "Network data was not returned by the guest probe.", addresses: [], gateway: null, dnsServers: [], configuredMode } : { status: "ok", addresses, gateway, dnsServers, configuredMode };
-  return { processes, listeningPorts, network };
+  return { processes, listeningPorts, services, network };
 };
 var decodeWslText = (input) => {
   if (typeof input === "string")
@@ -2843,7 +2863,8 @@ var readWslDiagnostics = async (name) => {
   }
   const probe = [
     `if command -v ps >/dev/null 2>&1; then process_rows="$(ps -eo pid=,%cpu=,%mem=,comm= -ww 2>/dev/null | awk '$(NF) != "sh" && $(NF) != "ps" && $(NF) != "awk" && $(NF) != "sort" && $(NF) != "head"')"; printf "__PROCESSES_CPU__\\n"; printf "%s\\n" "$process_rows" | sort -k2,2nr | head -n 100; printf "__PROCESSES_MEMORY__\\n"; printf "%s\\n" "$process_rows" | sort -k3,3nr | head -n 100; else printf "__PROCESSES_CPU__\\n__UNAVAILABLE__\\n__PROCESSES_MEMORY__\\n__UNAVAILABLE__\\n"; fi`,
-    `printf "__PORTS__\\n"; if command -v ss >/dev/null 2>&1; then ss -H -lntu 2>/dev/null | awk '{print $1 " " $5}' | head -n 100; else printf "__UNAVAILABLE__\\n"; fi`,
+    `printf "__PORTS__\\n"; if command -v ss >/dev/null 2>&1; then ss -H -lntup 2>/dev/null | awk '{print $1 " " $5 " " $NF}' | head -n 100; else printf "__UNAVAILABLE__\\n"; fi`,
+    'printf "__SERVICES__\\n"; if command -v systemctl >/dev/null 2>&1; then service_rows="$(systemctl list-units --type=service --all --no-legend --no-pager --plain --full 2>/dev/null)" && printf "%s\\n" "$service_rows" | head -n 100 || printf "__UNAVAILABLE__\\n"; else printf "__UNAVAILABLE__\\n"; fi',
     `printf "__NETWORK__\\n"; if command -v ip >/dev/null 2>&1; then printf "ADDRESSES="; hostname -I 2>/dev/null || true; printf "\\nGATEWAY="; ip -4 route show default 2>/dev/null | awk 'NR == 1 {for (i=1;i<NF;i++) if ($i == "via") {print $(i+1); exit}}'; printf "DNS="; awk '$1 == "nameserver" {print $2}' /etc/resolv.conf 2>/dev/null | head -n 8 | tr "\\n" " "; else printf "__UNAVAILABLE__\\n"; fi`
   ].join("; ");
   const result = await runWsl(["--distribution", distro.name, "--exec", "sh", "-c", probe], 1e4);

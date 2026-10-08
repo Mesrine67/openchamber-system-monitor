@@ -264,8 +264,29 @@ const distroCard = (options: WslPanelOptions, distro: WslDistribution): HTMLElem
       else if (diagnostics.listeningPorts.items.length === 0) diagnosticsView.append(element('div', 'caption', options.tm.noListeningPorts));
       else for (const listening of diagnostics.listeningPorts.items) {
         const line = element('div', 'row');
-        line.append(element('span', 'value', `${listening.protocol.toUpperCase()} ${listening.port}`), element('span', 'muted', listening.address));
+        const owner = listening.processName
+          ? `${listening.processName}${listening.pid === null ? '' : ` · PID ${listening.pid}`} · ${listening.address}`
+          : listening.address;
+        line.append(element('span', 'value', `${listening.protocol.toUpperCase()} ${listening.port}`), element('span', 'muted', owner));
         diagnosticsView.append(line);
+      }
+      diagnosticsView.append(element('h4', 'card-title wsl-detail-heading', options.tm.wslServices));
+      if (diagnostics.services.status === 'unavailable') diagnosticsView.append(element('div', 'caption', diagnostics.services.reason));
+      else if (diagnostics.services.items.length === 0) diagnosticsView.append(element('div', 'caption', options.tm.noWslServices));
+      else {
+        const details = element('details', 'wsl-service-details');
+        details.append(element('summary', 'card-title wsl-detail-heading', format(options.tm.wslServicesCount, { count: diagnostics.services.items.length })));
+        const serviceList = element('div', 'wsl-service-list');
+        for (const service of diagnostics.services.items) {
+          const line = element('div', 'wsl-service-row');
+          const identity = element('span', 'value');
+          identity.append(element('strong', '', service.unit));
+          const state = element('span', 'wsl-service-description', `${service.activeState} · ${service.subState}${service.description ? ` · ${service.description}` : ''}`);
+          line.append(identity, state);
+          serviceList.append(line);
+        }
+        details.append(serviceList);
+        diagnosticsView.append(details);
       }
       card.append(diagnosticsView);
     }

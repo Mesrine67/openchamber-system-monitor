@@ -140,7 +140,8 @@ export const readWslDiagnostics = async (name: string): Promise<WslDiagnostics> 
   }
   const probe = [
     'if command -v ps >/dev/null 2>&1; then process_rows="$(ps -eo pid=,%cpu=,%mem=,comm= -ww 2>/dev/null | awk \'$(NF) != "sh" && $(NF) != "ps" && $(NF) != "awk" && $(NF) != "sort" && $(NF) != "head"\')"; printf "__PROCESSES_CPU__\\n"; printf "%s\\n" "$process_rows" | sort -k2,2nr | head -n 100; printf "__PROCESSES_MEMORY__\\n"; printf "%s\\n" "$process_rows" | sort -k3,3nr | head -n 100; else printf "__PROCESSES_CPU__\\n__UNAVAILABLE__\\n__PROCESSES_MEMORY__\\n__UNAVAILABLE__\\n"; fi',
-    'printf "__PORTS__\\n"; if command -v ss >/dev/null 2>&1; then ss -H -lntu 2>/dev/null | awk \'{print $1 " " $5}\' | head -n 100; else printf "__UNAVAILABLE__\\n"; fi',
+    'printf "__PORTS__\\n"; if command -v ss >/dev/null 2>&1; then ss -H -lntup 2>/dev/null | awk \'{print $1 " " $5 " " $NF}\' | head -n 100; else printf "__UNAVAILABLE__\\n"; fi',
+    'printf "__SERVICES__\\n"; if command -v systemctl >/dev/null 2>&1; then service_rows="$(systemctl list-units --type=service --all --no-legend --no-pager --plain --full 2>/dev/null)" && printf "%s\\n" "$service_rows" | head -n 100 || printf "__UNAVAILABLE__\\n"; else printf "__UNAVAILABLE__\\n"; fi',
     'printf "__NETWORK__\\n"; if command -v ip >/dev/null 2>&1; then printf "ADDRESSES="; hostname -I 2>/dev/null || true; printf "\\nGATEWAY="; ip -4 route show default 2>/dev/null | awk \'NR == 1 {for (i=1;i<NF;i++) if ($i == "via") {print $(i+1); exit}}\'; printf "DNS="; awk \'$1 == "nameserver" {print $2}\' /etc/resolv.conf 2>/dev/null | head -n 8 | tr "\\n" " "; else printf "__UNAVAILABLE__\\n"; fi',
   ].join('; ');
   const result = await runWsl(['--distribution', distro.name, '--exec', 'sh', '-c', probe], 10_000);

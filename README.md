@@ -10,7 +10,7 @@ System Monitor is a local OpenChamber extension for monitoring and diagnosing th
 - **Health and recommendations:** shared health state, configurable warning/critical thresholds, and read-only suggestions. The only current system action opens Windows Storage settings.
 - **Diagnostics:** copy a sanitized Markdown/JSON summary that omits hostnames, user paths, disk identifiers, and process lists.
 - **History:** bounded 60-point display history. A 2/5/15/30-minute window uses a matching 2/5/15/30-second sample interval; sustained alerts keep their own short high-resolution buffer.
-- **WSL on Windows:** an on-demand dashboard for installed distributions, versions, state, guest OS, virtual disk size, shared WSL 2 VM memory, per-distro storage/process readings, GPU integration checks, and detected xrdp. It supports the Microsoft online distro list, install/import/export/clone/rename, common lifecycle/default/version operations, configuration editing, and selected disk management actions with explicit confirmations.
+- **WSL on Windows:** an on-demand dashboard for installed distributions, versions, state, guest OS, virtual disk size, shared WSL 2 VM memory, per-distro storage/process readings, GPU integration checks, systemd service status when available, listening ports, and detected xrdp. It supports the Microsoft online distro list, install/import/export/clone/rename, common lifecycle/default/version operations, configuration editing, and selected disk management actions with explicit confirmations.
 
 The UI uses OpenChamber SDK controls and `--oc-*` theme tokens. It follows host theme changes, supports reduced-motion preferences, and avoids recreating the overview DOM on each fast update.
 

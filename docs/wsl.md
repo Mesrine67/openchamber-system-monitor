@@ -38,7 +38,7 @@ These omissions avoid arbitrary code installation/execution, admin elevation, du
 The panel calls only authenticated local service routes:
 
 - `GET /wsl`: installed distributions and live details for already-running distros.
-- `GET /wsl/diagnostics?distro=<name>`: bounded process and listening-port diagnostics for one already-running WSL 2 distribution.
+- `GET /wsl/diagnostics?distro=<name>`: bounded process, listening-port, and (when systemd is available) service-state diagnostics for one already-running WSL 2 distribution, plus local network configuration readings.
 - `GET /wsl/catalog`: official WSL online distribution list; this network-backed Microsoft CLI command runs only after the user requests the catalog.
 - `GET /wsl/config`: read a supported global or per-distribution configuration file.
 - `POST /wsl/config`: save a bounded configuration after exact typed confirmation.
@@ -49,4 +49,4 @@ The service checks the OpenChamber bearer token before these routes, listens on 
 
 `src/service/collectors/parse-wsl.ts` and `parse-wsl-conf.ts` contain pure parsers; fixtures under `test/fixtures/` are sanitized. Do not move WSL sampling into the System Monitor sampler or startup path.
 
-Guest addresses, gateway and DNS values are read locally from `hostname -I`, `ip route` and `/etc/resolv.conf` only when the user requests a diagnostic. This does not test DNS reachability, Windows-to-WSL connectivity, firewall decisions or active sockets beyond the existing local listener listing. NAT and mirrored networking have different localhost behavior; see Microsoft's [WSL networking guidance](https://learn.microsoft.com/en-us/windows/wsl/networking).
+Guest addresses, gateway and DNS values are read locally from `hostname -I`, `ip route` and `/etc/resolv.conf` only when the user requests a diagnostic. Service state is read with a fixed `systemctl list-units` command; unsupported/missing systemd is reported as unavailable, and no service control action is exposed. This does not test DNS reachability, Windows-to-WSL connectivity, firewall decisions or active sockets beyond the existing local listener listing. NAT and mirrored networking have different localhost behavior; see Microsoft's [WSL networking guidance](https://learn.microsoft.com/en-us/windows/wsl/networking) and [systemd support documentation](https://learn.microsoft.com/en-us/windows/wsl/systemd).

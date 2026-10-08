@@ -38,9 +38,14 @@ describe('WSL parser', () => {
         { pid: 3011, name: 'background worker', cpuPercent: 1.5, memoryPercent: 3.8 },
       ] },
       listeningPorts: { status: 'ok', items: [
-        { protocol: 'tcp', address: '127.0.0.1', port: 3000 },
-        { protocol: 'tcp', address: '[::]', port: 22 },
-        { protocol: 'udp', address: '0.0.0.0', port: 5353 },
+        { protocol: 'tcp', address: '127.0.0.1', port: 3000, processName: 'node', pid: 1842 },
+        { protocol: 'tcp', address: '[::]', port: 22, processName: null, pid: null },
+        { protocol: 'udp', address: '0.0.0.0', port: 5353, processName: 'dns worker', pid: 92 },
+      ] },
+      services: { status: 'ok', items: [
+        { unit: 'cron.service', loadState: 'loaded', activeState: 'active', subState: 'running', description: 'Regular background program processing daemon' },
+        { unit: 'docker.service', loadState: 'loaded', activeState: 'active', subState: 'exited', description: 'Docker Application Container Engine' },
+        { unit: 'inactive-worker.service', loadState: 'loaded', activeState: 'inactive', subState: 'dead', description: 'A disabled service with a descriptive name' },
       ] },
       network: {
         status: 'ok', addresses: ['172.30.144.20', 'fe80::215:5dff:fe00:1234'], gateway: '172.30.144.1',
@@ -62,10 +67,21 @@ describe('WSL parser', () => {
     expect(new Set(parsed.processes.items.map(({ pid }) => pid)).size).toBe(200);
   });
 
+  test('bounds the systemd service list and ignores malformed rows', () => {
+    const rows = Array.from({ length: 105 }, (_, index) => `worker-${index}.service loaded active running Worker ${index}`).join('\n');
+    const parsed = parseWslDiagnostics(`__PROCESSES__\n__UNAVAILABLE__\n__PORTS__\n__UNAVAILABLE__\n__SERVICES__\n${rows}\nnot a systemd row\n__NETWORK__`);
+    expect(parsed.services.status).toBe('ok');
+    if (parsed.services.status !== 'ok') return;
+    expect(parsed.services.items).toHaveLength(100);
+    expect(parsed.services.items[0]).toEqual({ unit: 'worker-0.service', loadState: 'loaded', activeState: 'active', subState: 'running', description: 'Worker 0' });
+    expect(parsed.services.items.at(-1)?.unit).toBe('worker-99.service');
+  });
+
   test('keeps missing guest tools unavailable and drops malformed readings', () => {
     expect(parseWslDiagnostics('__PROCESSES__\n__UNAVAILABLE__\n__PORTS__\ntcp 0.0.0.0:99999\n')).toEqual({
       processes: { status: 'unavailable', reason: 'The ps utility is not available in this distribution.', items: [] },
       listeningPorts: { status: 'ok', items: [] },
+      services: { status: 'unavailable', reason: 'Service data was not returned.', items: [] },
       network: { status: 'unavailable', reason: 'Network data was not returned by the guest probe.', addresses: [], gateway: null, dnsServers: [], configuredMode: null },
     });
   });
