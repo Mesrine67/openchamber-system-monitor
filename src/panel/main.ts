@@ -1,5 +1,5 @@
 import {
-  mountBadge, mountBanner, mountButton, mountProgress, mountSelect, mountSpinner, mountSwitch, mountTabs,
+  mountBadge, mountBanner, mountButton, mountProgress, mountSearchField, mountSelect, mountSpinner, mountSwitch, mountTabs,
   type BadgeHandle, type ButtonHandle, type ProgressHandle, type TabsHandle, type Tone,
 } from '@openchamber/sdk/ui';
 import type { JsonValue } from '@openchamber/sdk';
@@ -19,8 +19,11 @@ import {
 } from '../shared/stats.ts';
 
 const SETTINGS_KEY = 'system-monitor.settings.v2';
-const TABS = ['overview', 'performance', 'storage', 'hardware', 'health', 'optimization', 'wsl', 'settings'] as const;
+const TABS = ['overview', 'processes', 'performance', 'storage', 'hardware', 'health', 'optimization', 'wsl', 'settings'] as const;
 type TabId = typeof TABS[number];
+type ProcessFilter = 'all' | 'cpu' | 'memory';
+type ProcessSort = 'cpu' | 'memory' | 'name' | 'pid';
+type SortDirection = 'ascending' | 'descending';
 
 installStyle(`${BASE_CSS}${SPARKLINE_CSS}
 html,body{height:100%;min-height:100%;background:var(--oc-bg);overflow:auto}
@@ -41,12 +44,13 @@ html,body{height:100%;min-height:100%;background:var(--oc-bg);overflow:auto}
 .chart-card{min-width:0}.chart{height:70px}.chart .spark{height:52px}.chart .caption{display:flex;justify-content:space-between}.core-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(40px,1fr));gap:5px}.core-cell{display:flex;flex-direction:column;gap:3px;min-width:0}.core-fill{height:5px;border-radius:4px;background:var(--oc-primary);transition:width 180ms ease}.core-track{height:5px;border-radius:4px;background:var(--oc-subtle)}
 .warning-list{display:flex;flex-direction:column;gap:5px}.warning-row{border-left:2px solid var(--oc-warning);padding:4px 8px;background:color-mix(in srgb,var(--oc-warning) 7%,transparent);border-radius:0 5px 5px 0}.warning-row[data-level=critical]{border-color:var(--oc-error);background:color-mix(in srgb,var(--oc-error) 7%,transparent)}.warning-row>summary{display:flex;justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer;list-style-position:inside}.warning-row>summary strong{font-size:11px}.warning-row .severity{font-size:10px;color:var(--oc-warning-text);white-space:nowrap}.warning-row[data-level=critical] .severity{color:var(--oc-error-text)}
 .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:8px}.info-block{display:flex;flex-direction:column;gap:7px}.process-table{display:flex;flex-direction:column;gap:5px}.process-row{display:grid;grid-template-columns:minmax(90px,1fr) auto 56px 64px;gap:8px;align-items:center;font-size:11px}.process-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.process-row+.process-row{border-top:1px solid var(--oc-border);padding-top:5px}.empty{padding:12px;color:var(--oc-muted);border:1px dashed var(--oc-border);border-radius:var(--oc-radius,8px)}
+.process-controls{display:grid;grid-template-columns:minmax(180px,2fr) minmax(150px,1fr);gap:8px;align-items:center}.processes-grid{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}.processes-grid th,.processes-grid td{padding:8px 10px;border-bottom:1px solid var(--oc-border);text-align:left}.processes-grid th{color:var(--oc-muted);font-weight:550}.processes-grid td.value{text-align:right;font-variant-numeric:tabular-nums}.processes-grid th:nth-child(2),.processes-grid td:nth-child(2){width:90px}.processes-grid th:nth-child(3),.processes-grid td:nth-child(3),.processes-grid th:nth-child(4),.processes-grid td:nth-child(4){width:120px}.process-sort{border:0;background:transparent;color:inherit;font:inherit;padding:2px 0;cursor:pointer}.process-sort:focus-visible{outline:2px solid var(--oc-primary);outline-offset:2px;border-radius:3px}
 .recommendation{padding:9px 10px;border:1px solid var(--oc-border);border-radius:var(--oc-radius,8px);display:flex;flex-direction:column;gap:6px}.recommendation strong{font-size:12px}.settings-group{display:flex;flex-direction:column;gap:9px}.select-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,225px),1fr));gap:10px}.select-field{display:flex;flex-direction:column;gap:5px;min-width:0}.switch-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:8px}.settings-note{border-left:2px solid var(--oc-info);padding:7px 9px;color:var(--oc-muted);font-size:11px;background:color-mix(in srgb,var(--oc-info) 5%,transparent)}
 .loading{min-height:140px;display:grid;place-items:center}.header [data-tone=success]{color:var(--oc-success-text)}
 .wsl-view{gap:10px}.wsl-section-head,.wsl-summary,.wsl-distro-header,.wsl-actions,.wsl-confirm-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.wsl-section-head{justify-content:space-between}.wsl-summary{justify-content:space-between;padding:8px 10px;border:1px solid var(--oc-border);border-radius:var(--oc-radius,8px)}.wsl-list{display:flex;flex-direction:column;gap:8px}.wsl-distro{gap:8px}.wsl-distro-header .card-title{min-width:0;overflow-wrap:anywhere}.wsl-default-label{font-size:10px;color:var(--oc-primary-text)}.wsl-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:5px 10px}.wsl-detail-heading{grid-column:1/-1;margin:4px 0 0}.wsl-actions{padding-top:3px;border-top:1px solid var(--oc-border)}.wsl-action{display:inline-flex}.wsl-status{border-left:2px solid var(--oc-info);padding:7px 9px;color:var(--oc-info-text);background:color-mix(in srgb,var(--oc-info) 6%,transparent);font-size:11px}.wsl-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));align-items:end;gap:8px}.wsl-fields>.wsl-action{align-self:end}.wsl-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,155px),1fr));gap:8px;align-items:end}.wsl-config-card{gap:10px}.wsl-config-field{min-width:0}.wsl-config-field textarea.oc-sdk-input{min-height:280px;resize:vertical;tab-size:2}.wsl-confirm{color:var(--oc-fg);background:var(--oc-bg);border:1px solid var(--oc-border);border-radius:var(--oc-radius,8px);padding:16px;max-width:min(480px,calc(100vw - 32px));box-shadow:0 18px 50px #0005}.wsl-confirm::backdrop{background:#0008}.wsl-confirm-form{display:flex;flex-direction:column;gap:10px}.wsl-confirm-actions{justify-content:flex-end}
 .skeleton{height:68px;border-radius:var(--oc-radius,8px);background:var(--oc-subtle);opacity:.7}.refreshing{animation:refresh-pulse 180ms ease-out}@keyframes refresh-pulse{50%{opacity:.7}}
 @container (min-width:720px){.page .grid{grid-template-columns:repeat(4,minmax(0,1fr))}.page .wide-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:520px){.updated{display:none}.header{gap:5px;padding:8px}.header-actions{gap:2px}.content{padding:9px}.process-row{grid-template-columns:minmax(72px,1fr) auto 48px 54px;font-size:10px}.metric-value{font-size:17px}.wsl-filters{grid-template-columns:1fr 1fr}.wsl-filters>div:first-child{grid-column:1/-1}}
+@media(max-width:520px){.updated{display:none}.header{gap:5px;padding:8px}.header-actions{gap:2px}.content{padding:9px}.process-row{grid-template-columns:minmax(72px,1fr) auto 48px 54px;font-size:10px}.process-controls{grid-template-columns:1fr}.processes-grid{font-size:11px}.processes-grid th,.processes-grid td{padding:7px 5px}.processes-grid th:nth-child(2),.processes-grid td:nth-child(2){width:54px}.processes-grid th:nth-child(3),.processes-grid td:nth-child(3),.processes-grid th:nth-child(4),.processes-grid td:nth-child(4){width:76px}.metric-value{font-size:17px}.wsl-filters{grid-template-columns:1fr 1fr}.wsl-filters>div:first-child{grid-column:1/-1}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 `);
 
@@ -59,6 +63,10 @@ let lastStats: Stats | null = null;
 let activeTab: TabId = 'overview';
 let cpuView: 'overall' | 'per-core' = 'overall';
 let storageView: 'capacity' | 'activity' = 'capacity';
+let processQuery = '';
+let processFilter: ProcessFilter = 'all';
+let processSort: ProcessSort = 'cpu';
+let processSortDirection: SortDirection = 'descending';
 let lastLocale = '';
 let lastSurface = '';
 let loadingSettings = false;
@@ -113,7 +121,7 @@ shell.append(header, navWrap, content);
 root.replaceChildren(shell);
 
 const tabLabels = (tm: MonitorMessages) => [
-  { id: 'overview', label: tm.overview }, { id: 'performance', label: tm.performance },
+  { id: 'overview', label: tm.overview }, { id: 'processes', label: tm.processes }, { id: 'performance', label: tm.performance },
   { id: 'storage', label: tm.storage }, { id: 'hardware', label: tm.hardware },
   { id: 'health', label: tm.health }, { id: 'optimization', label: tm.optimization }, { id: 'wsl', label: tm.wsl }, { id: 'settings', label: tm.settings },
 ];
@@ -299,6 +307,107 @@ const addProcesses = (parent: HTMLElement, stats: Stats, tm: MonitorMessages, t:
   };
   show(tm.topCpu, stats.processes.topCpu, true);
   show(tm.topMemory, stats.processes.topMemory, false);
+};
+
+const renderProcesses = (stats: Stats, tm: MonitorMessages, t: Messages, locale: string): HTMLElement => {
+  const view = element('div', 'view section');
+  const card = section(view, tm.processes, 'card');
+  card.append(element('div', 'caption', tm.processScopeNotice));
+  if (stats.processes.status !== 'ok') {
+    card.append(element('div', 'empty', describeUnavailable(stats.processes, t)));
+    return view;
+  }
+
+  // The service intentionally samples only the configured top N. This view merges
+  // those ranked snapshots; it does not claim to be a full OS process enumeration.
+  const byPid = new Map<number, ProcessEntry>();
+  for (const item of [...stats.processes.topCpu, ...stats.processes.topMemory]) {
+    byPid.set(item.pid, { ...byPid.get(item.pid), ...item });
+  }
+  const controls = element('div', 'process-controls');
+  const searchSlot = element('div');
+  mountSearchField(searchSlot, {
+    value: processQuery, label: tm.searchProcesses, placeholder: tm.searchProcesses,
+    onChange: (value) => { processQuery = value; renderActive(); },
+  });
+  const filterSlot = element('div');
+  mountSelect(filterSlot, {
+    value: processFilter, label: tm.processFilter,
+    options: [
+      { id: 'all', label: tm.allProcesses },
+      { id: 'cpu', label: tm.highCpuProcesses },
+      { id: 'memory', label: tm.highMemoryProcesses },
+    ],
+    onChange: (id) => {
+      if (id === 'all' || id === 'cpu' || id === 'memory') { processFilter = id; renderActive(); }
+    },
+  });
+  controls.append(searchSlot, filterSlot);
+  card.append(controls);
+
+  const query = processQuery.trim().toLocaleLowerCase(locale);
+  const cpuThreshold = 5;
+  const memoryThreshold = 512 * 1024 * 1024;
+  const rows = [...byPid.values()].filter((item) => {
+    const matchesQuery = !query || item.name.toLocaleLowerCase(locale).includes(query) || String(item.pid).includes(query);
+    const matchesFilter = processFilter === 'all'
+      || (processFilter === 'cpu' && item.cpuPercent !== null && item.cpuPercent >= cpuThreshold)
+      || (processFilter === 'memory' && item.memoryBytes !== null && item.memoryBytes >= memoryThreshold);
+    return matchesQuery && matchesFilter;
+  });
+  rows.sort((a, b) => {
+    const comparison = processSort === 'name' ? a.name.localeCompare(b.name, locale)
+      : processSort === 'pid' ? a.pid - b.pid
+        : processSort === 'cpu' ? (a.cpuPercent ?? -1) - (b.cpuPercent ?? -1)
+          : (a.memoryBytes ?? -1) - (b.memoryBytes ?? -1);
+    return processSortDirection === 'ascending' ? comparison : -comparison;
+  });
+
+  const table = element('table', 'processes-grid');
+  table.setAttribute('aria-label', tm.processes);
+  const thead = element('thead');
+  const headings = element('tr');
+  const sortColumns: { label: string; key: ProcessSort }[] = [
+    { label: tm.process, key: 'name' }, { label: tm.pid, key: 'pid' },
+    { label: tm.cpu, key: 'cpu' }, { label: tm.memory, key: 'memory' },
+  ];
+  sortColumns.forEach(({ label, key }) => {
+    const th = element('th');
+    if (processSort === key) th.setAttribute('aria-sort', processSortDirection);
+    const sortButton = document.createElement('button');
+    sortButton.type = 'button';
+    sortButton.className = 'process-sort';
+    sortButton.textContent = `${label}${processSort === key ? processSortDirection === 'ascending' ? ' ↑' : ' ↓' : ''}`;
+    sortButton.setAttribute('aria-label', format(tm.sortProcessesBy, { column: label }));
+    sortButton.addEventListener('click', () => {
+      if (processSort === key) processSortDirection = processSortDirection === 'ascending' ? 'descending' : 'ascending';
+      else {
+        processSort = key;
+        processSortDirection = key === 'name' || key === 'pid' ? 'ascending' : 'descending';
+      }
+      renderActive();
+    });
+    th.append(sortButton);
+    headings.append(th);
+  });
+  thead.append(headings);
+  table.append(thead);
+  const tbody = element('tbody');
+  rows.slice(0, settings.processLimit).forEach((item) => {
+    const tr = element('tr');
+    tr.append(
+      element('td', 'process-name', item.name),
+      element('td', 'muted', String(item.pid)),
+      element('td', 'value', item.cpuPercent === null ? t.notAvailable : formatPercent(item.cpuPercent, locale)),
+      element('td', 'value', item.memoryBytes === null ? t.notAvailable : formatBytes(item.memoryBytes, locale)),
+    );
+    tbody.append(tr);
+  });
+  table.append(tbody);
+  if (rows.length === 0) card.append(element('div', 'empty', tm.noMatchingProcesses));
+  else card.append(table);
+  card.append(element('div', 'caption', format(tm.processRowsShown, { count: Math.min(rows.length, settings.processLimit), total: rows.length })));
+  return view;
 };
 
 const renderPerformance = (stats: Stats, t: Messages, tm: MonitorMessages, locale: string): HTMLElement => {
@@ -882,7 +991,8 @@ const renderActive = (): void => {
   const stats = state.stats;
   lastStats = stats;
   const view = activeTab === 'overview' ? renderOverview(stats, t, tm, locale)
-    : activeTab === 'performance' ? renderPerformance(stats, t, tm, locale)
+    : activeTab === 'processes' ? renderProcesses(stats, tm, t, locale)
+      : activeTab === 'performance' ? renderPerformance(stats, t, tm, locale)
       : activeTab === 'storage' ? renderStorage(stats, t, tm, locale)
         : activeTab === 'hardware' ? renderHardware(stats, t, tm, locale)
           : activeTab === 'health' ? renderHealth(stats, t, tm, locale)

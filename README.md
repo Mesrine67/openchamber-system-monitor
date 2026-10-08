@@ -5,7 +5,7 @@ System Monitor is a local OpenChamber extension for monitoring and diagnosing th
 ## What it includes
 
 - **Work Status:** compact health, CPU, memory, GPU, and fullest-volume readings.
-- **Rail panel:** Overview, Performance, Storage, Hardware, Health, Optimization, and Settings views. CPU history can switch between overall and per-core; storage separates capacity from activity.
+- **Rail panel:** Overview, Processes, Performance, Storage, Hardware, Health, Optimization, and Settings views. The Processes view searches and sorts the configured bounded CPU/memory sample; it does not claim to enumerate every system process. CPU history can switch between overall and per-core; storage separates capacity from activity.
 - **Full-page dashboard:** open System Monitor from OpenChamber’s **Extension pages** menu. The SDK does not let an extension open its contributed page programmatically; the rail button explains where to find it.
 - **Health and recommendations:** shared health state, configurable warning/critical thresholds, and read-only suggestions. The only current system action opens Windows Storage settings.
 - **Diagnostics:** copy a sanitized Markdown/JSON summary that omits hostnames, user paths, disk identifiers, and process lists.

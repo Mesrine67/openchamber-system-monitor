@@ -5,7 +5,7 @@
 System Monitor has three distinct surfaces backed by one service snapshot:
 
 1. **Work Status** stays compact: a shared health state and CPU, memory, busiest GPU, and fullest valid disk.
-2. **Rail panel** is a summary and diagnostic workspace with Overview, Performance, Storage, Hardware, Health, Optimization, and Settings tabs. Its header stays available while scrolling. CPU and storage use secondary segmented controls instead of stacking every detail.
+2. **Rail panel** is a summary and diagnostic workspace with Overview, Processes, Performance, Storage, Hardware, Health, Optimization, WSL, and Settings tabs. Its header stays available while scrolling. CPU and storage use secondary segmented controls instead of stacking every detail.
 3. **Full-page dashboard** reuses the panel entry and adds a responsive, wider layout. OpenChamber registers it as `contributes.page`; the host's Extension pages menu opens it. SDK `openSurface` is for rail surfaces and does not open contributed full pages.
 
 The UI remains vanilla TypeScript. SDK UI controls provide host-consistent buttons, badges, progress, tabs, selects, switches, banners, and spinners. CSS uses `--oc-*` variables, keeps `color-scheme` synchronized with the host, and disables motion under `prefers-reduced-motion`. Overview nodes persist between readings. Other views patch their existing DOM where the structure is stable; settings controls are rebuilt only when entering that tab or changing context.
@@ -47,6 +47,8 @@ Collectors and pure parsers are under `src/service/collectors/`:
 - **Storage:** `df` parsing with APFS shared-container folding, Linux duplicate/bind/virtual-filesystem filtering, Windows logical volumes; disk activity uses Linux `/proc/diskstats` and Windows performance counters. macOS disk activity is unavailable.
 - **Network:** Linux `/proc/net/dev` plus routes and sysfs link speed; macOS `netstat` plus route; Windows adapter statistics plus default-route CIM/PowerShell. Only active interfaces are listed where the OS gives a reliable state.
 - **Processes:** bounded `/proc` reads on Linux, Windows performance CIM, and `ps` on macOS. The UI receives only the configured top 5/10/20, without command line or path collection; no process action is offered.
+
+The Processes tab merges the bounded CPU-ranked and memory-ranked samples by PID, then provides local search, CPU/memory threshold filters, and accessible column sorting. The union is capped again at the configured process limit. It is a useful inspection view, not a complete Task Manager replacement: full process enumeration, process trees, per-process network/I/O, command lines, and termination are not exposed by the current collectors.
 - **Battery/temperature/hardware:** OS-native sources only. Some sensor families are not safely exposed without vendor utilities or elevated privileges and remain unavailable. Hardware collection avoids serial numbers and product keys.
 
 Containers are detected and use cgroup CPU/memory limits where present. Other platforms or fields use host/OS fallbacks only when the values are known to be meaningful.
