@@ -119,8 +119,17 @@ export type NetworkInterface = {
 };
 export type NetworkStats = { status: 'ok'; interfaces: NetworkInterface[]; sampledAt: number };
 
-export type ProcessEntry = { pid: number; name: string; cpuPercent: number | null; memoryBytes: number | null };
-export type ProcessStats = { status: 'ok'; topCpu: ProcessEntry[]; topMemory: ProcessEntry[]; sampledAt: number };
+export type ProcessEntry = {
+  pid: number; name: string; cpuPercent: number | null; memoryBytes: number | null;
+  parentPid?: number | null; threadCount?: number | null; state?: string | null;
+};
+export type ProcessStats = {
+  status: 'ok'; topCpu: ProcessEntry[]; topMemory: ProcessEntry[]; sampledAt: number;
+  /** PID-ordered, bounded inventory for search and sorting. */
+  items?: ProcessEntry[];
+  totalProcesses?: number;
+  inventoryTruncated?: boolean;
+};
 
 export type BatteryStats = {
   status: 'ok';

@@ -11,7 +11,7 @@ const safeName = (value: unknown): string | null => {
   return name && name !== '.' ? name : null;
 };
 
-export const parseLinuxProcessStat = (text: string): { pid: number; name: string; cpuTicks: number } | null => {
+export const parseLinuxProcessStat = (text: string): { pid: number; name: string; cpuTicks: number; parentPid: number | null; threadCount: number | null; state: string | null } | null => {
   const match = /^(\d+) \((.*)\) ([^ ]+) (.*)$/.exec(text.trim());
   if (!match?.[1] || match[2] === undefined || !match[4]) return null;
   const pid = Number(match[1]);
@@ -19,9 +19,11 @@ export const parseLinuxProcessStat = (text: string): { pid: number; name: string
   // The tail starts at field 4 (ppid); utime/stime are fields 14/15.
   const userTicks = safeNumber(fields[10]);
   const systemTicks = safeNumber(fields[11]);
+  const parentPid = safeNumber(fields[0]);
+  const threadCount = safeNumber(fields[16]);
   const name = safeName(match[2]);
   if (!Number.isSafeInteger(pid) || pid <= 0 || !name || userTicks === null || systemTicks === null) return null;
-  return { pid, name, cpuTicks: userTicks + systemTicks };
+  return { pid, name, cpuTicks: userTicks + systemTicks, parentPid, threadCount, state: match[3] ?? null };
 };
 
 export const parseLinuxProcessMemory = (text: string): number | null => {
@@ -55,8 +57,10 @@ export const parseWindowsProcesses = (text: string, limit = 20): ProcessEntry[] 
     const name = safeName(Reflect.get(value, 'Name'));
     const cpuPercent = safeNumber(Reflect.get(value, 'PercentProcessorTime'));
     const memoryBytes = safeNumber(Reflect.get(value, 'WorkingSetPrivate'));
+    const parentPid = safeNumber(Reflect.get(value, 'CreatingProcessID'));
+    const threadCount = safeNumber(Reflect.get(value, 'ThreadCount'));
     if (pid === null || pid <= 0 || !name) continue;
-    result.push({ pid, name, cpuPercent, memoryBytes });
+    result.push({ pid, name, cpuPercent, memoryBytes, ...(parentPid !== null ? { parentPid } : {}), ...(threadCount !== null ? { threadCount } : {}) });
   }
   return result.slice(0, limit);
 };
@@ -64,14 +68,22 @@ export const parseWindowsProcesses = (text: string, limit = 20): ProcessEntry[] 
 export const parsePsProcesses = (text: string, limit = 20): ProcessEntry[] | null => {
   const result: ProcessEntry[] = [];
   for (const line of text.split(/\r?\n/)) {
-    const match = /^\s*(\d+)\s+(.+?)\s+(\d+(?:\.\d+)?)\s+(\d+)\s*$/.exec(line);
-    if (!match?.[1] || !match[2] || !match[3] || !match[4]) continue;
-    const pid = Number(match[1]);
-    const name = safeName(match[2]);
-    const cpuPercent = Number(match[3]);
-    const rssKib = Number(match[4]);
+    const extended = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\d+(?:\.\d+)?)\s+(\d+)\s+(.+?)\s*$/.exec(line);
+    const legacy = extended ? null : /^\s*(\d+)\s+(.+?)\s+(\d+(?:\.\d+)?)\s+(\d+)\s*$/.exec(line);
+    const pidText = extended?.[1] ?? legacy?.[1];
+    const rawName = extended?.[6] ?? legacy?.[2];
+    const cpuText = extended?.[4] ?? legacy?.[3];
+    const rssText = extended?.[5] ?? legacy?.[4];
+    if (!pidText || !rawName || !cpuText || !rssText) continue;
+    const pid = Number(pidText);
+    const name = safeName(rawName);
+    const cpuPercent = Number(cpuText);
+    const rssKib = Number(rssText);
     if (!Number.isSafeInteger(pid) || pid <= 0 || !name || !Number.isFinite(cpuPercent) || !Number.isSafeInteger(rssKib)) continue;
-    result.push({ pid, name, cpuPercent: Math.max(0, cpuPercent), memoryBytes: Math.max(0, rssKib) * 1024 });
+    result.push({
+      pid, name, cpuPercent: Math.max(0, cpuPercent), memoryBytes: Math.max(0, rssKib) * 1024,
+      ...(extended ? { parentPid: Number(extended[2]), state: extended[3] } : {}),
+    });
   }
   return result.slice(0, limit);
 };
@@ -80,3 +92,11 @@ export const rankProcesses = (entries: ProcessEntry[], limit: number): { topCpu:
   topCpu: [...entries].filter((item) => item.cpuPercent !== null).sort((a, b) => (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1)).slice(0, limit),
   topMemory: [...entries].filter((item) => item.memoryBytes !== null).sort((a, b) => (b.memoryBytes ?? -1) - (a.memoryBytes ?? -1)).slice(0, limit),
 });
+
+/** Keep the table payload bounded and stable while preserving the observed total. */
+export const processInventory = (entries: ProcessEntry[], total: number, limit = 500) => {
+  const ordered = [...entries].sort((a, b) => a.pid - b.pid);
+  const safeLimit = Math.max(1, Math.min(500, Math.floor(limit)));
+  const totalProcesses = Math.max(ordered.length, Math.floor(total));
+  return { items: ordered.slice(0, safeLimit), totalProcesses, inventoryTruncated: totalProcesses > safeLimit };
+};

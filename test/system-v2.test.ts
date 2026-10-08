@@ -5,7 +5,7 @@ import { parseDarwinBattery, parseLinuxBattery, parseWindowsBattery } from '../s
 import { diskActivityFromDelta, parseProcDiskStats, parseWindowsDiskActivity } from '../src/service/collectors/parse-disk-activity.ts';
 import { parseHwmonReading, parseNvidiaTemperatures } from '../src/service/collectors/parse-sensors.ts';
 import { parseDarwinDefaultRoute, parseDarwinNetstat, parseDefaultRoute, parseProcNetDev, parseWindowsNetwork, deriveNetworkRates } from '../src/service/collectors/parse-network.ts';
-import { parseLinuxProcessMemory, parseLinuxProcessStat, parseLinuxTotalCpuTicks, parsePsProcesses, parseWindowsProcesses } from '../src/service/collectors/parse-processes.ts';
+import { parseLinuxProcessMemory, parseLinuxProcessStat, parseLinuxTotalCpuTicks, parsePsProcesses, parseWindowsProcesses, processInventory } from '../src/service/collectors/parse-processes.ts';
 import { evaluateHealth } from '../src/shared/health.ts';
 import { DEFAULT_MONITOR_SETTINGS, diskPercent, fullestDisk, normalizeMonitorSettings, unavailable } from '../src/shared/stats.ts';
 import { evaluateWarnings } from '../src/service/warnings.ts';
@@ -53,7 +53,8 @@ describe('process parsers', () => {
   test('Linux handles parentheses in the process name and parses RSS', () => {
     const fields = Array.from({ length: 40 }, () => '0');
     fields[10] = '12'; fields[11] = '3';
-    expect(parseLinuxProcessStat(`42 (worker (child)) R ${fields.join(' ')}`)).toEqual({ pid: 42, name: 'worker (child)', cpuTicks: 15 });
+    fields[0] = '4'; fields[16] = '8';
+    expect(parseLinuxProcessStat(`42 (worker (child)) R ${fields.join(' ')}`)).toEqual({ pid: 42, name: 'worker (child)', cpuTicks: 15, parentPid: 4, threadCount: 8, state: 'R' });
     expect(parseLinuxProcessMemory('VmRSS: 1024 kB\n')).toBe(1024 * 1024);
     expect(parseLinuxTotalCpuTicks('cpu  1 2 3 4 5 6 7 8')).toBe(36);
   });
@@ -69,6 +70,22 @@ describe('process parsers', () => {
     expect(parsePsProcesses('  123 /Applications/Editor.app/Contents/MacOS/Editor  12.5  204800\n')).toEqual([
       { pid: 123, name: 'Editor', cpuPercent: 12.5, memoryBytes: 204800 * 1024 },
     ]);
+    expect(parsePsProcesses('  123  77 S  12.5  204800 /Applications/Editor.app/Contents/MacOS/Editor\n')).toEqual([
+      { pid: 123, name: 'Editor', cpuPercent: 12.5, memoryBytes: 204800 * 1024, parentPid: 77, state: 'S' },
+    ]);
+  });
+
+  test('process inventory stays capped, ordered by PID and reports truncation', () => {
+    const entries = [
+      { pid: 9, name: 'later', cpuPercent: 0, memoryBytes: 1 },
+      { pid: 2, name: 'earlier', cpuPercent: 0, memoryBytes: 1 },
+    ];
+    expect(processInventory(entries, 20, 1)).toEqual({
+      items: [entries[1]!], totalProcesses: 20, inventoryTruncated: true,
+    });
+    expect(processInventory(entries, 2, 10)).toEqual({
+      items: [entries[1]!, entries[0]!], totalProcesses: 2, inventoryTruncated: false,
+    });
   });
 });
 

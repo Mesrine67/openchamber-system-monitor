@@ -1516,10 +1516,12 @@ var parseLinuxProcessStat = (text) => {
   const fields = match[4].split(/\s+/);
   const userTicks = safeNumber(fields[10]);
   const systemTicks = safeNumber(fields[11]);
+  const parentPid = safeNumber(fields[0]);
+  const threadCount = safeNumber(fields[16]);
   const name = safeName(match[2]);
   if (!Number.isSafeInteger(pid) || pid <= 0 || !name || userTicks === null || systemTicks === null)
     return null;
-  return { pid, name, cpuTicks: userTicks + systemTicks };
+  return { pid, name, cpuTicks: userTicks + systemTicks, parentPid, threadCount, state: match[3] ?? null };
 };
 var parseLinuxProcessMemory = (text) => {
   const match = /^VmRSS:\s+(\d+) kB$/m.exec(text);
@@ -1554,25 +1556,38 @@ var parseWindowsProcesses = (text, limit = 20) => {
     const name = safeName(Reflect.get(value, "Name"));
     const cpuPercent = safeNumber(Reflect.get(value, "PercentProcessorTime"));
     const memoryBytes = safeNumber(Reflect.get(value, "WorkingSetPrivate"));
+    const parentPid = safeNumber(Reflect.get(value, "CreatingProcessID"));
+    const threadCount = safeNumber(Reflect.get(value, "ThreadCount"));
     if (pid === null || pid <= 0 || !name)
       continue;
-    result.push({ pid, name, cpuPercent, memoryBytes });
+    result.push({ pid, name, cpuPercent, memoryBytes, ...parentPid !== null ? { parentPid } : {}, ...threadCount !== null ? { threadCount } : {} });
   }
   return result.slice(0, limit);
 };
 var parsePsProcesses = (text, limit = 20) => {
   const result = [];
   for (const line of text.split(/\r?\n/)) {
-    const match = /^\s*(\d+)\s+(.+?)\s+(\d+(?:\.\d+)?)\s+(\d+)\s*$/.exec(line);
-    if (!match?.[1] || !match[2] || !match[3] || !match[4])
+    const extended = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\d+(?:\.\d+)?)\s+(\d+)\s+(.+?)\s*$/.exec(line);
+    const legacy = extended ? null : /^\s*(\d+)\s+(.+?)\s+(\d+(?:\.\d+)?)\s+(\d+)\s*$/.exec(line);
+    const pidText = extended?.[1] ?? legacy?.[1];
+    const rawName = extended?.[6] ?? legacy?.[2];
+    const cpuText = extended?.[4] ?? legacy?.[3];
+    const rssText = extended?.[5] ?? legacy?.[4];
+    if (!pidText || !rawName || !cpuText || !rssText)
       continue;
-    const pid = Number(match[1]);
-    const name = safeName(match[2]);
-    const cpuPercent = Number(match[3]);
-    const rssKib = Number(match[4]);
+    const pid = Number(pidText);
+    const name = safeName(rawName);
+    const cpuPercent = Number(cpuText);
+    const rssKib = Number(rssText);
     if (!Number.isSafeInteger(pid) || pid <= 0 || !name || !Number.isFinite(cpuPercent) || !Number.isSafeInteger(rssKib))
       continue;
-    result.push({ pid, name, cpuPercent: Math.max(0, cpuPercent), memoryBytes: Math.max(0, rssKib) * 1024 });
+    result.push({
+      pid,
+      name,
+      cpuPercent: Math.max(0, cpuPercent),
+      memoryBytes: Math.max(0, rssKib) * 1024,
+      ...extended ? { parentPid: Number(extended[2]), state: extended[3] } : {}
+    });
   }
   return result.slice(0, limit);
 };
@@ -1580,14 +1595,21 @@ var rankProcesses = (entries, limit) => ({
   topCpu: [...entries].filter((item) => item.cpuPercent !== null).sort((a, b) => (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1)).slice(0, limit),
   topMemory: [...entries].filter((item) => item.memoryBytes !== null).sort((a, b) => (b.memoryBytes ?? -1) - (a.memoryBytes ?? -1)).slice(0, limit)
 });
+var processInventory = (entries, total, limit = 500) => {
+  const ordered = [...entries].sort((a, b) => a.pid - b.pid);
+  const safeLimit = Math.max(1, Math.min(500, Math.floor(limit)));
+  const totalProcesses = Math.max(ordered.length, Math.floor(total));
+  return { items: ordered.slice(0, safeLimit), totalProcesses, inventoryTruncated: totalProcesses > safeLimit };
+};
 
 // src/service/collectors/processes.ts
 var WINDOWS_PROCESSES = `
 $ErrorActionPreference = 'SilentlyContinue'
-$rows = @(Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object { $_.IDProcess -gt 0 -and $_.Name -ne '_Total' } | Select-Object Name, IDProcess, PercentProcessorTime, WorkingSetPrivate)
+$rows = @(Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object { $_.IDProcess -gt 0 -and $_.Name -ne '_Total' } | Select-Object Name, IDProcess, PercentProcessorTime, WorkingSetPrivate, CreatingProcessID, ThreadCount)
 $cpu = @($rows | Sort-Object { [double]$_.PercentProcessorTime } -Descending | Select-Object -First 20)
 $mem = @($rows | Sort-Object { [double]$_.WorkingSetPrivate } -Descending | Select-Object -First 20)
-@{ topCpu = $cpu; topMemory = $mem } | ConvertTo-Json -Compress -Depth 3
+$items = @($rows | Sort-Object { [int]$_.IDProcess } | Select-Object -First 500)
+@{ topCpu = $cpu; topMemory = $mem; items = $items; totalProcesses = $rows.Count } | ConvertTo-Json -Compress -Depth 3
 `;
 var createProcessCollector = (platform, now) => {
   let previousCpuTicks = null;
@@ -1595,16 +1617,18 @@ var createProcessCollector = (platform, now) => {
   const readLinux = async (limit) => {
     let pids;
     try {
-      pids = (await readdir4("/proc")).filter((name) => /^\d+$/.test(name)).slice(0, 2048);
+      pids = (await readdir4("/proc")).filter((name) => /^\d+$/.test(name)).sort((a, b) => Number(a) - Number(b));
     } catch {
       return unavailable("failed");
     }
     const systemTicks = parseLinuxTotalCpuTicks(await readText("/proc/stat") ?? "");
     if (systemTicks === null)
       return unavailable("failed");
+    const totalProcesses = pids.length;
+    const selectedPids = pids.slice(0, 2048);
     const current = [];
-    for (let offset = 0;offset < pids.length; offset += 64) {
-      const chunk = await Promise.all(pids.slice(offset, offset + 64).map(async (pidText) => {
+    for (let offset = 0;offset < selectedPids.length; offset += 64) {
+      const chunk = await Promise.all(selectedPids.slice(offset, offset + 64).map(async (pidText) => {
         const [statText, statusText] = await Promise.all([
           readText(`/proc/${pidText}/stat`),
           readText(`/proc/${pidText}/status`)
@@ -1616,6 +1640,9 @@ var createProcessCollector = (platform, now) => {
           pid: parsed.pid,
           name: parsed.name,
           cpuTicks: parsed.cpuTicks,
+          parentPid: parsed.parentPid,
+          threadCount: parsed.threadCount,
+          state: parsed.state,
           memoryBytes: statusText ? parseLinuxProcessMemory(statusText) : null
         };
       }));
@@ -1627,12 +1654,12 @@ var createProcessCollector = (platform, now) => {
       const before = previous?.get(item.pid);
       const delta = before === undefined ? null : item.cpuTicks - before;
       const cpuPercent = delta === null || totalDelta === null || totalDelta <= 0 || delta < 0 ? null : Math.min(100, delta / totalDelta * 100);
-      return { pid: item.pid, name: item.name, cpuPercent, memoryBytes: item.memoryBytes };
+      return { pid: item.pid, name: item.name, cpuPercent, memoryBytes: item.memoryBytes, parentPid: item.parentPid, threadCount: item.threadCount, state: item.state };
     });
     previousCpuTicks = new Map(current.map((item) => [item.pid, item.cpuTicks]));
     previousSystemTicks = systemTicks;
     const ranked = rankProcesses(entries, limit);
-    return { status: "ok", ...ranked, sampledAt: now() };
+    return { status: "ok", ...ranked, ...processInventory(entries, totalProcesses), sampledAt: now() };
   };
   const readOther = async (limit) => {
     let entries;
@@ -1655,23 +1682,26 @@ var createProcessCollector = (platform, now) => {
         cpuPercent: item.cpuPercent === null ? null : Math.min(100, item.cpuPercent / Math.max(1, os3.cpus().length))
       })) ?? null;
       const memory = parseWindowsProcesses(fields("topMemory"), 20);
-      if (cpu === null || memory === null)
+      const items = parseWindowsProcesses(fields("items"), 500);
+      const totalProcesses = typeof data === "object" && data !== null ? Number(Reflect.get(data, "totalProcesses")) : NaN;
+      if (cpu === null || memory === null || items === null || !Number.isFinite(totalProcesses))
         return unavailable("failed");
       const union = new Map;
       for (const item of [...cpu, ...memory])
         union.set(item.pid, { ...union.get(item.pid), ...item });
       const ranked = rankProcesses([...union.values()], limit);
-      return { status: "ok", ...ranked, sampledAt: now() };
+      return { status: "ok", ...ranked, ...processInventory(items.map((item) => ({ ...item, cpuPercent: item.cpuPercent === null ? null : Math.min(100, item.cpuPercent / Math.max(1, os3.cpus().length)) })), totalProcesses), sampledAt: now() };
     }
     if (platform === "darwin") {
-      const result = await run(["/bin/ps", "ps"], ["-Ao", "pid=,comm=,%cpu=,rss="]);
+      const result = await run(["/bin/ps", "ps"], ["-Ao", "pid=,ppid=,stat=,%cpu=,rss=,comm="]);
       if (!result.ok)
         return unavailable(result.missing ? "tool-missing" : "failed", "ps");
       entries = parsePsProcesses(result.stdout, 2048);
       if (entries === null)
         return unavailable("failed");
       const ranked = rankProcesses(entries, limit);
-      return { status: "ok", ...ranked, sampledAt: now() };
+      const totalProcesses = result.stdout.split(/\r?\n/).filter((line) => /^\s*\d+\s/.test(line)).length;
+      return { status: "ok", ...ranked, ...processInventory(entries, totalProcesses), sampledAt: now() };
     }
     return unavailable("unsupported");
   };

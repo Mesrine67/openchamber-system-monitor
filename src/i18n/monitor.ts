@@ -7,6 +7,8 @@ export type MonitorMessages = {
   noIssues: string; issuesDetected: string; processes: string; topCpu: string; topMemory: string;
   process: string; processFilter: string; searchProcesses: string; allProcesses: string; highCpuProcesses: string; highMemoryProcesses: string;
   processScopeNotice: string; noMatchingProcesses: string; sortProcessesBy: string; processRowsShown: string;
+  processInventoryCapped: string; processInventoryComplete: string;
+  parentPid: string; threadCount: string;
   network: string; interfaceCount: string; download: string; upload: string; battery: string; charging: string; discharging: string; full: string;
   temperature: string; frequency: string; activity: string; read: string; write: string;
   recommendation: string; openSystemSettings: string; refreshInterval: string; historyWindow: string; processLimit: string;
@@ -49,7 +51,7 @@ const en: MonitorMessages = {
   refresh: 'Refresh', pause: 'Pause', resume: 'Resume', dashboard: 'Full dashboard', lastUpdate: 'Updated', paused: 'Monitoring paused',
   noIssues: 'No issues detected', issuesDetected: '{n} issues detected', processes: 'Processes', topCpu: 'Top CPU', topMemory: 'Top memory',
   process: 'Process', processFilter: 'Filter processes', searchProcesses: 'Search name or PID', allProcesses: 'All sampled processes', highCpuProcesses: 'CPU ≥ 5%', highMemoryProcesses: 'Memory ≥ 512 MB',
-  processScopeNotice: 'Shows the configured top processes ranked by CPU and memory. This is a bounded sample, not the complete operating system process list.', noMatchingProcesses: 'No sampled process matches these filters.', sortProcessesBy: 'Sort by {column}', processRowsShown: 'Showing {count} of {total} matching sampled processes.',
+  processScopeNotice: 'Search and sort a PID-ordered inventory of up to 500 processes. No process command lines or paths are collected.', noMatchingProcesses: 'No sampled process matches these filters.', sortProcessesBy: 'Sort by {column}', processRowsShown: '{count} matching processes.', processInventoryCapped: 'Showing a bounded sample of {count} from {total} detected processes.', processInventoryComplete: '{total} processes detected.', parentPid: 'Parent', threadCount: 'threads',
   network: 'Network', interfaceCount: 'Interfaces: {n}', download: 'Download', upload: 'Upload', battery: 'Battery', charging: 'Charging', discharging: 'Discharging', full: 'Full',
   temperature: 'Temperature', frequency: 'Frequency', activity: 'Activity', read: 'Read', write: 'Write',
   recommendation: 'Recommendation', openSystemSettings: 'Open Storage settings', refreshInterval: 'Refresh interval', historyWindow: 'History window', processLimit: 'Process list size',
@@ -103,7 +105,7 @@ const fr: MonitorMessages = {
   refresh: 'Actualiser', pause: 'Mettre en pause', resume: 'Reprendre', dashboard: 'Tableau de bord complet', lastUpdate: 'Mis à jour', paused: 'Surveillance en pause',
   noIssues: 'Aucun problème détecté', issuesDetected: '{n} problèmes détectés', processes: 'Processus', topCpu: 'Plus forte utilisation CPU', topMemory: 'Plus forte utilisation mémoire',
   process: 'Processus', processFilter: 'Filtrer les processus', searchProcesses: 'Rechercher par nom ou PID', allProcesses: 'Tous les processus échantillonnés', highCpuProcesses: 'CPU ≥ 5 %', highMemoryProcesses: 'Mémoire ≥ 512 Mo',
-  processScopeNotice: 'Affiche les processus les mieux classés selon le CPU et la mémoire. Il s’agit d’un échantillon limité, pas de la liste complète des processus du système.', noMatchingProcesses: 'Aucun processus échantillonné ne correspond aux filtres.', sortProcessesBy: 'Trier par {column}', processRowsShown: '{count} sur {total} processus échantillonnés correspondants.',
+  processScopeNotice: 'Recherche et tri dans un inventaire ordonné par PID, limité à 500 processus. Aucune ligne de commande ni aucun chemin de processus ne sont collectés.', noMatchingProcesses: 'Aucun processus échantillonné ne correspond aux filtres.', sortProcessesBy: 'Trier par {column}', processRowsShown: '{count} processus correspondent.', processInventoryCapped: 'Échantillon limité à {count} processus sur {total} détectés.', processInventoryComplete: '{total} processus détectés.', parentPid: 'Parent', threadCount: 'threads',
   network: 'Réseau', interfaceCount: 'Interfaces réseau : {n}', download: 'Téléchargement', upload: 'Envoi', battery: 'Batterie', charging: 'En charge', discharging: 'En décharge', full: 'Chargée',
   temperature: 'Température', frequency: 'Fréquence', activity: 'Activité', read: 'Lecture', write: 'Écriture',
   recommendation: 'Conseil', openSystemSettings: 'Ouvrir les paramètres de stockage', refreshInterval: 'Fréquence d’actualisation', historyWindow: 'Période de l’historique', processLimit: 'Nombre de processus',

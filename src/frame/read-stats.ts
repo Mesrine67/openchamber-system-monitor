@@ -20,6 +20,9 @@ const isSeries = (value: unknown): value is (number | null)[] =>
 const hasArray = (value: unknown, key: string): boolean =>
   isObject(value) && (field(value, 'status') !== 'ok' || Array.isArray(field(value, key)));
 
+const hasOptionalArray = (value: unknown, key: string): boolean =>
+  isObject(value) && (field(value, key) === undefined || Array.isArray(field(value, key)));
+
 export const isStats = (value: unknown): value is Stats => {
   if (!isObject(value) || typeof field(value, 'sampledAt') !== 'number') return false;
   const environment = field(value, 'environment');
@@ -34,6 +37,7 @@ export const isStats = (value: unknown): value is Stats => {
     && hasArray(field(value, 'network'), 'interfaces')
     && hasArray(field(value, 'processes'), 'topCpu')
     && hasArray(field(value, 'processes'), 'topMemory')
+    && hasOptionalArray(field(value, 'processes'), 'items')
     && hasArray(field(value, 'sensors'), 'readings')
     && isObject(history)
     && isSeries(field(history, 'cpu'))
