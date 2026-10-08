@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0 - 2026-10-08
+
+- Add an on-demand Windows WSL manager for distribution inventory, guest diagnostics, lifecycle actions, Microsoft catalog install, import/export/clone/rename, supported configuration files, and virtual-disk operations.
+- Keep WSL discovery isolated from normal metric sampling; validate actions, use fixed process argument lists, and require explicit confirmation for destructive or disruptive changes.
+- Document feature coverage and the host-privilege and extension-sandbox limits compared with the standalone WSL UI application.
+
 ## 1.1.2 - 2026-10-08
 
 - Detect mapped Windows network volumes, including SSHFS drives, and show them with their network drive type.

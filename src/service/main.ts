@@ -1,6 +1,7 @@
 // Started by OpenChamber with the app's own runtime (Node, Electron as Node, or Bun).
 // Listens on 127.0.0.1 only; the host proxies the panel's requests and adds the token.
 import http from 'node:http';
+import { randomUUID } from 'node:crypto';
 
 import { createCpuMemCollector } from './collectors/cpu-mem.ts';
 import { readBattery } from './collectors/battery.ts';
@@ -15,6 +16,8 @@ import { runPowerShell } from './collectors/windows.ts';
 import { currentPlatform, detectContainer } from './env.ts';
 import { createSampler } from './sampler.ts';
 import { DEFAULT_MONITOR_SETTINGS, normalizeMonitorSettings, type MonitorSettings } from '../shared/stats.ts';
+import { parseWslAction, parseWslConfigUpdate, type WslJob } from '../shared/wsl.ts';
+import { readWslCatalog, readWslConfig, readWslSnapshot, runWslAction, saveWslConfig } from './wsl.ts';
 
 const port = Number(process.env.OPENCHAMBER_SERVICE_PORT);
 const token = process.env.OPENCHAMBER_SERVICE_TOKEN ?? '';
@@ -29,6 +32,14 @@ const now = () => Date.now();
 let settings: MonitorSettings = structuredClone(DEFAULT_MONITOR_SETTINGS);
 const processCollector = createProcessCollector(platform, now);
 const diskActivity = createDiskActivityCollector(platform, now);
+const wslJobs = new Map<string, WslJob>();
+
+const pruneWslJobs = (): void => {
+  const cutoff = Date.now() - 30 * 60_000;
+  for (const [id, job] of wslJobs) {
+    if (job.state !== 'running' && (job.finishedAt ?? job.startedAt) < cutoff) wslJobs.delete(id);
+  }
+};
 
 const sampler = createSampler({
   now,
@@ -63,7 +74,7 @@ const readJsonBody = (req: http.IncomingMessage): Promise<unknown | null> => new
   req.on('data', (chunk: Buffer) => {
     if (failed) return;
     size += chunk.length;
-    if (size > 16_384) {
+    if (size > 32_768) {
       failed = true;
       resolve(null);
       return;
@@ -105,6 +116,74 @@ const server = http.createServer((req, res) => {
       else if (!next.paused && wasPaused) sampler.resume();
       send(res, 200, { ok: true });
     });
+    return;
+  }
+  if (pathname === '/wsl' && req.method === 'GET') {
+    readWslSnapshot().then(
+      (snapshot) => send(res, 200, snapshot),
+      () => send(res, 503, { error: 'wsl-unavailable' }),
+    );
+    return;
+  }
+  if (pathname === '/wsl/catalog' && req.method === 'GET') {
+    readWslCatalog(new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('refresh') === '1').then(
+      (catalog) => send(res, 200, catalog),
+      () => send(res, 503, { supported: false, items: [], error: 'La liste des distributions WSL est indisponible.' }),
+    );
+    return;
+  }
+  if (pathname === '/wsl/config' && req.method === 'GET') {
+    const query = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams;
+    const kind = query.get('kind') === 'distribution' ? 'distribution' : 'global';
+    const distro = query.get('distro') ?? undefined;
+    readWslConfig(kind, distro).then(
+      (document) => send(res, 200, document),
+      (error: unknown) => send(res, 400, { error: error instanceof Error ? error.message : 'WSL configuration unavailable.' }),
+    );
+    return;
+  }
+  if (pathname === '/wsl/config' && req.method === 'POST') {
+    readJsonBody(req).then(async (value) => {
+      const update = parseWslConfigUpdate(value);
+      if (!update) { send(res, 400, { ok: false, message: 'WSL configuration is invalid or its typed confirmation is missing.' }); return; }
+      try {
+        await saveWslConfig(update);
+        send(res, 200, { ok: true });
+      } catch (error) {
+        send(res, 500, { ok: false, message: error instanceof Error ? error.message : 'Could not save WSL configuration.' });
+      }
+    });
+    return;
+  }
+  if (pathname === '/wsl/action' && req.method === 'POST') {
+    readJsonBody(req).then((value) => {
+      const action = parseWslAction(value);
+      if (!action) { send(res, 400, { ok: false, message: 'Action WSL invalide ou confirmation manquante.' }); return; }
+      pruneWslJobs();
+      if ([...wslJobs.values()].filter((job) => job.state === 'running').length >= 3) {
+        send(res, 429, { ok: false, message: 'Trop d’opérations WSL sont déjà en cours.' });
+        return;
+      }
+      const id = randomUUID();
+      const job: WslJob = { id, action: action.action, state: 'running', message: 'Opération en cours.', startedAt: Date.now(), finishedAt: null };
+      wslJobs.set(id, job);
+      send(res, 202, job);
+      void runWslAction(action).then((result) => {
+        job.state = result.ok ? 'succeeded' : 'failed';
+        job.message = result.message;
+        job.finishedAt = Date.now();
+      }, () => {
+        job.state = 'failed';
+        job.message = 'L’opération WSL a échoué.';
+        job.finishedAt = Date.now();
+      });
+    });
+    return;
+  }
+  const wslJobMatch = pathname.match(/^\/wsl\/jobs\/([0-9a-f-]{36})$/i);
+  if (wslJobMatch && req.method === 'GET') {
+    const job = wslJobs.get(wslJobMatch[1] ?? '');
+    send(res, job ? 200 : 404, job ?? { error: 'not-found' });
     return;
   }
   if (pathname === '/open-storage-settings' && req.method === 'POST' && platform === 'win32') {

@@ -7,6 +7,7 @@ OpenChamber extension (SDK `@openchamber/sdk`, manifest in `package.json` → `o
 - `src/shared/stats.ts`: the `/stats` contract, settings bounds, thresholds and history limits. Both sides import it; `src/shared/health.ts` owns the shared health calculation.
 - `src/service/`: authenticated localhost service, staggered sampler, validated settings endpoint, warnings and OS/container detection.
 - `src/service/collectors/parse-*.ts`: **pure** parsers, text in, typed values out. Platform collectors gather CPU/memory/GPU, storage/activity, network, processes, battery, sensors and static hardware.
+- `src/shared/wsl.ts`, `src/service/wsl.ts`, and `src/panel/wsl-view.ts`: optional Windows-only WSL management, typed contracts, fixed-command service operations, and a theme-aware panel tab. WSL work is lazy: never query or start distributions during service startup or normal metric sampling.
 - `src/frame/`: shared frame code: host wiring, poller, `/stats` boundary check, formatting, sparklines and UI helpers.
 - `src/panel/`: rail summary, diagnostic tabs, Settings and the responsive full-page entry.
 - `src/status/`: compact Work Status section; do not turn it into the full dashboard.
@@ -32,6 +33,7 @@ The preview only polls while its tab is visible, like inside OpenChamber. Its pa
 - Collectors never throw into the sampler; one failing source must not hide the others.
 - The service runs with a minimal environment (PATH, HOME, temp, locale, Windows system variables). Call system tools by absolute path first, then the bare name. Windows PowerShell hangs when `PSModulePath` is unset or only the system folder, so always start it through `powerShellEnv()` (it sets it empty); `scripts/smoke.mjs` uses the exact variable list OpenChamber passes.
 - Frames are classic IIFE bundles in a sandboxed iframe: no network, no ESM, no Node APIs. Talk to the service only through `host.serviceRequest`; persist extension preferences with `host.storage`.
+- WSL endpoints are `/wsl`, `/wsl/catalog`, `/wsl/config`, `/wsl/action`, and `/wsl/jobs/<id>`. Validate actions and arguments in `src/shared/wsl.ts`; use `execFile` with fixed argument arrays, bounded input/output, typed confirmation for destructive or lengthy operations, and no user-provided shell text. WSL probes must remain on demand from the WSL tab.
 - Style with the host theme variables (`--oc-*`) and keep `color-scheme` following `data-oc-theme`; without it a dark host paints the iframe white.
 - New UI text goes into `src/i18n/monitor.ts` for the supported locale set; avoid hard-coded labels in panel/status views. Keep placeholders consistent and cover locale completeness in tests.
 - Run `bun run build` after every source change and commit `dist/` with it. CI fails when `dist/` is stale.

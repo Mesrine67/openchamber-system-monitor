@@ -10,6 +10,7 @@ System Monitor is a local OpenChamber extension for monitoring and diagnosing th
 - **Health and recommendations:** shared health state, configurable warning/critical thresholds, and read-only suggestions. The only current system action opens Windows Storage settings.
 - **Diagnostics:** copy a sanitized Markdown/JSON summary that omits hostnames, user paths, disk identifiers, and process lists.
 - **History:** bounded 60-point display history. A 2/5/15/30-minute window uses a matching 2/5/15/30-second sample interval; sustained alerts keep their own short high-resolution buffer.
+- **WSL on Windows:** an on-demand dashboard for installed distributions, versions, state, guest OS, virtual disk size, shared WSL 2 VM memory, per-distro storage/process readings, GPU integration checks, and detected xrdp. It supports the Microsoft online distro list, install/import/export/clone/rename, common lifecycle/default/version operations, configuration editing, and selected disk management actions with explicit confirmations.
 
 The UI uses OpenChamber SDK controls and `--oc-*` theme tokens. It follows host theme changes, supports reduced-motion preferences, and avoids recreating the overview DOM on each fast update.
 
@@ -60,6 +61,8 @@ The settings page controls display refresh, history window, optional data module
 Defaults are 85% warning and 95% critical for memory and disk. CPU/GPU alerts require the configured sustained duration (60 seconds by default); swap alerts default to 50%. Change thresholds in the extension Settings tab.
 
 The service binds to `127.0.0.1`, checks OpenChamber’s bearer token on every endpoint, and has no external listener, analytics, telemetry, or cloud dependency. System actions are explicit; monitoring and recommendations do not delete files, stop processes, edit the registry, or disable services. Process names/PIDs stay in the UI and are excluded from copied diagnostics.
+
+WSL management is available only when the OpenChamber service runs on Windows. Its collectors run only after opening the WSL tab; stopped distributions are not started to collect details. The extension follows OpenChamber’s current theme and locale rather than introducing WSL UI’s separate theme/language settings. It intentionally does not execute arbitrary distro commands, install arbitrary rootfs/container/LXC images, provision Linux desktops, mount physical disks, invoke UAC, or provide a system tray. WSL UI is a native application with elevated operations; OpenChamber extensions run with the host service’s current user privileges and SDK surface. See [docs/wsl.md](docs/wsl.md) for feature coverage and limits.
 
 ## Development
 

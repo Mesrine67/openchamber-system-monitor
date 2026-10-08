@@ -10,6 +10,8 @@ System Monitor has three distinct surfaces backed by one service snapshot:
 
 The UI remains vanilla TypeScript. SDK UI controls provide host-consistent buttons, badges, progress, tabs, selects, switches, banners, and spinners. CSS uses `--oc-*` variables, keeps `color-scheme` synchronized with the host, and disables motion under `prefers-reduced-motion`. Overview nodes persist between readings. Other views patch their existing DOM where the structure is stable; settings controls are rebuilt only when entering that tab or changing context.
 
+The Windows-only WSL manager is an opt-in tab in the rail/page panel. It is separate from the fast system sampler and makes no WSL calls until the user selects the tab. It uses the SDK controls, host theme tokens, and extension locale system. Its refresh interval is 30 seconds while the tab is visible, with WSL version, registry metadata and guest probes cached separately. Memory is reported once for the shared WSL 2 utility VM, never duplicated as if each distro owned a separate VM.
+
 These decisions follow the official [extension guide](https://docs.openchamber.dev/extensions/), [SDK overview](https://docs.openchamber.dev/sdk/), [host API](https://docs.openchamber.dev/sdk/host/), and [UI Kit](https://docs.openchamber.dev/sdk/ui/). In particular, a contributed page is discovered by the host's Extension pages menu, storage is provided by the host, and the panel itself remains a sandboxed UI surface.
 
 ## Data ownership and contracts
@@ -59,7 +61,7 @@ Optimization is recommendation-only. The current Windows disk recommendation off
 
 ## Security and privacy
 
-The service listens only on `127.0.0.1` and requires the per-instance bearer token OpenChamber supplies. Requests are limited to `/health`, `/stats`, validated `/settings`, and a fixed Windows Storage-settings action. The extension makes no network requests, has no telemetry, and never executes user-supplied text. PowerShell scripts and arguments are constants; subprocesses have timeouts and the GPU helper is terminated on pause/idle/shutdown.
+The service listens only on `127.0.0.1` and requires the per-instance bearer token OpenChamber supplies. Requests include `/health`, `/stats`, validated `/settings`, a fixed Windows Storage-settings action, and the on-demand WSL endpoints documented in [wsl.md](wsl.md). The extension frame makes no direct network requests or telemetry and never executes user-supplied text. The optional WSL catalog delegates to `wsl --list --online` only after the user requests it; WSL CLI owns any network access for that command. PowerShell scripts and arguments are constants; WSL actions use strict parsers and fixed `execFile` argument arrays, bounded inputs/outputs, checked target paths, timeouts, and typed confirmations for destructive or long-running changes.
 
 Metrics remain local. Copied diagnostics exclude hostnames, usernames, home paths, serials, disk device/mount identifiers, process rows, and credentials. They contain platform/OS family, hardware model names where available, coarse metric values, volume ordinals/capacities, and warning types.
 

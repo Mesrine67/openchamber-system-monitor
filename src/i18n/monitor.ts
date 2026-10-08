@@ -20,6 +20,24 @@ export type MonitorMessages = {
   storageRecommendation: string; memoryRecommendation: string; cpuRecommendation: string; noProcesses: string;
   lastTwoMinutes: string; lastFiveMinutes: string; lastFifteenMinutes: string; lastThirtyMinutes: string;
   everyTwoSeconds: string; everyFiveSeconds: string; everyTenSeconds: string; showTop5: string; showTop10: string; showTop20: string;
+  wsl: string; distributions: string; wslUnavailable: string; noDistributions: string; wslVersion: string; kernelVersion: string;
+  running: string; stopped: string; startDistro: string; stopDistro: string; restartDistro: string; setDefaultDistro: string;
+  openTerminal: string; openFiles: string; openVscode: string; setVersion: string; setDefaultUser: string;
+  shutdownAll: string; forceShutdown: string; unregisterDistro: string; confirmAction: string; confirmExact: string;
+  actionInProgress: string; actionSucceeded: string; actionFailed: string; dataRemovedWarning: string;
+  cancel: string; compactWarning: string; forceShutdownWarning: string; shutdownWarning: string; compactDisk: string; setVersionWarning: string;
+  installDistribution: string; onlineCatalog: string; selectDistribution: string; exportDistribution: string; exportTo: string;
+  importDistribution: string; importArchive: string; distroName: string; installLocation: string; versionLabel: string;
+  moveDistro: string; resizeDisk: string; enableSparse: string; disableSparse: string; moveWarning: string; resizeWarning: string;
+  operationSection: string; manageSection: string; pathPlaceholder: string; archivePlaceholder: string; usernamePlaceholder: string;
+  noCatalogItems: string; loadCatalog: string;
+  defaultUserWarning: string;
+  globalConfig: string; distributionConfig: string; editConfig: string; saveConfig: string; configNotice: string; configSaved: string;
+  runningCount: string; defaultWslVersion: string; setDefaultWslVersion: string; updateWsl: string; updateWslWarning: string; defaultVersionWarning: string;
+  searchDistributions: string; stateFilter: string; versionFilter: string; allDistributions: string; runningFilter: string; stoppedFilter: string; noFilteredDistributions: string;
+  sourceFilter: string; source: string; storeSource: string; importedSource: string; unknownSource: string; virtualDiskSize: string;
+  vmMemory: string; wsl2Required: string; gpuSupport: string; gpuAvailable: string; gpuUnavailable: string; directXGpu: string; cudaLibrary: string; nvidiaToolkit: string; cdiSpec: string; remoteDesktop: string;
+  cloneDistro: string; renameDistro: string; cloneName: string; cloneLocation: string; cloneWarning: string; renameWarning: string; defaultDistro: string; cpuPerDistroUnavailable: string;
 };
 
 const en: MonitorMessages = {
@@ -42,6 +60,35 @@ const en: MonitorMessages = {
   storageRecommendation: 'Review large files or open the operating system storage settings.', memoryRecommendation: 'Check the top memory processes before closing anything.', cpuRecommendation: 'Check the top CPU processes and whether the load is expected.', noProcesses: 'Process details are unavailable on this system.',
   lastTwoMinutes: 'Last 2 minutes', lastFiveMinutes: 'Last 5 minutes', lastFifteenMinutes: 'Last 15 minutes', lastThirtyMinutes: 'Last 30 minutes',
   everyTwoSeconds: 'Every 2 seconds', everyFiveSeconds: 'Every 5 seconds', everyTenSeconds: 'Every 10 seconds', showTop5: 'Top 5', showTop10: 'Top 10', showTop20: 'Top 20',
+  wsl: 'WSL', distributions: 'Distributions', wslUnavailable: 'WSL is not available on the OpenChamber service host.', noDistributions: 'No WSL distributions are installed.',
+  wslVersion: 'WSL version', kernelVersion: 'Kernel version', running: 'Running', stopped: 'Stopped', startDistro: 'Start', stopDistro: 'Stop',
+  restartDistro: 'Restart', setDefaultDistro: 'Set default', openTerminal: 'Open terminal', openFiles: 'Open files', openVscode: 'Open in VS Code',
+  setVersion: 'Set WSL version', setDefaultUser: 'Default user', shutdownAll: 'Shut down all', forceShutdown: 'Force shutdown',
+  unregisterDistro: 'Unregister', confirmAction: 'Confirm action', confirmExact: 'Type exactly: {value}', actionInProgress: 'Working…',
+  actionSucceeded: 'Action completed', actionFailed: 'Action failed', dataRemovedWarning: 'This permanently deletes the distribution and its files.',
+  cancel: 'Cancel', compactWarning: 'The virtual disk for {distro} will be compacted after WSL shuts down.',
+  forceShutdownWarning: 'WSL stops immediately, even if an operation is running. Work in progress may lose data.',
+  shutdownWarning: 'All running WSL distributions will be stopped.', compactDisk: 'Compact virtual disk',
+  setVersionWarning: 'Converting a distribution can take a long time and may fail. Back up important files before changing its WSL version.',
+  installDistribution: 'Install distribution', onlineCatalog: 'Online catalog', selectDistribution: 'Select a distribution', exportDistribution: 'Export distribution', exportTo: 'Export archive to',
+  importDistribution: 'Import distribution', importArchive: 'Import TAR archive', distroName: 'New distribution name', installLocation: 'Installation folder', versionLabel: 'WSL version',
+  moveDistro: 'Move distribution', resizeDisk: 'Resize virtual disk', enableSparse: 'Enable sparse mode', disableSparse: 'Disable sparse mode',
+  moveWarning: 'This moves {distro} to another folder and may take several minutes. Ensure WSL has enough free space at the destination.',
+  resizeWarning: 'This stops all WSL distributions before changing the virtual disk size for {distro}.',
+  operationSection: 'Distribution operations', manageSection: 'Manage distribution', pathPlaceholder: 'For example: D:\\WSL\\Ubuntu', archivePlaceholder: 'For example: D:\\Backups\\Ubuntu.tar', usernamePlaceholder: 'Linux username',
+  noCatalogItems: 'The online distribution list is unavailable or empty.', loadCatalog: 'Load online catalog',
+  defaultUserWarning: 'This verifies the Linux user, then writes the default login to /etc/wsl.conf as root. Restart this distribution for the change to take effect.',
+  globalConfig: 'Global WSL settings', distributionConfig: '{distro} settings', editConfig: 'Edit configuration', saveConfig: 'Save configuration',
+  configNotice: 'Configuration can affect startup, networking, file access, or root-run boot commands. Save only settings you understand. Changes may require a full WSL shutdown.',
+  configSaved: 'WSL configuration saved. Restart WSL or the affected distribution to apply it.',
+  runningCount: '{running} running of {total} distributions', defaultWslVersion: 'Default WSL version', setDefaultWslVersion: 'Set default version to WSL {version}',
+  updateWsl: 'Update WSL', updateWslWarning: 'This downloads and installs the current WSL package. Running distributions may need to be restarted.',
+  defaultVersionWarning: 'This changes the WSL version used for newly installed distributions. Existing distributions are not converted.',
+  searchDistributions: 'Search distributions', stateFilter: 'Status', versionFilter: 'WSL version', allDistributions: 'All', runningFilter: 'Running', stoppedFilter: 'Stopped', noFilteredDistributions: 'No distributions match these filters.',
+  sourceFilter: 'Source', source: 'Source', storeSource: 'Microsoft Store', importedSource: 'Imported', unknownSource: 'Unknown', virtualDiskSize: 'Virtual disk file',
+  vmMemory: 'Shared WSL VM memory', wsl2Required: 'This operation requires a WSL 2 distribution.', gpuSupport: 'WSL GPU support', gpuAvailable: 'Available', gpuUnavailable: 'Not available', directXGpu: 'DirectX GPU device', cudaLibrary: 'NVIDIA CUDA library', nvidiaToolkit: 'NVIDIA Container Toolkit', cdiSpec: 'NVIDIA CDI spec', remoteDesktop: 'Open xrdp desktop',
+  cloneDistro: 'Clone distribution', renameDistro: 'Rename distribution', cloneName: 'Clone name', cloneLocation: 'Clone installation folder', cloneWarning: 'This exports the source distribution and imports a copy under a new name. It can require substantial free disk space and may take a long time.', renameWarning: 'This creates and verifies a full copy under the new name, then unregisters the original. Keep enough free disk space. If removal fails, both distributions remain available.',
+  defaultDistro: 'Default distribution', cpuPerDistroUnavailable: 'WSL does not expose reliable CPU usage per distribution.',
 };
 
 const fr: MonitorMessages = {
@@ -64,6 +111,35 @@ const fr: MonitorMessages = {
   storageRecommendation: 'Examine les gros fichiers ou ouvre les paramètres de stockage du système.', memoryRecommendation: 'Consulte les processus qui utilisent le plus de mémoire avant d’en fermer un.', cpuRecommendation: 'Vérifie les processus les plus actifs et si cette charge est attendue.', noProcesses: 'Les détails des processus ne sont pas disponibles sur ce système.',
   lastTwoMinutes: '2 dernières minutes', lastFiveMinutes: '5 dernières minutes', lastFifteenMinutes: '15 dernières minutes', lastThirtyMinutes: '30 dernières minutes',
   everyTwoSeconds: 'Toutes les 2 secondes', everyFiveSeconds: 'Toutes les 5 secondes', everyTenSeconds: 'Toutes les 10 secondes', showTop5: 'Top 5', showTop10: 'Top 10', showTop20: 'Top 20',
+  wsl: 'WSL', distributions: 'Distributions', wslUnavailable: 'WSL est indisponible sur la machine qui héberge le service OpenChamber.', noDistributions: 'Aucune distribution WSL installée.',
+  wslVersion: 'Version de WSL', kernelVersion: 'Version du noyau', running: 'En cours', stopped: 'Arrêtée', startDistro: 'Démarrer', stopDistro: 'Arrêter',
+  restartDistro: 'Redémarrer', setDefaultDistro: 'Définir par défaut', openTerminal: 'Ouvrir le terminal', openFiles: 'Ouvrir les fichiers', openVscode: 'Ouvrir dans VS Code',
+  setVersion: 'Définir la version WSL', setDefaultUser: 'Utilisateur par défaut', shutdownAll: 'Arrêter tout WSL', forceShutdown: 'Forcer l’arrêt',
+  unregisterDistro: 'Désinscrire', confirmAction: 'Confirmer l’action', confirmExact: 'Saisis exactement : {value}', actionInProgress: 'Opération en cours…',
+  actionSucceeded: 'Action terminée', actionFailed: 'Échec de l’action', dataRemovedWarning: 'Cette action supprime définitivement la distribution et ses fichiers.',
+  cancel: 'Annuler', compactWarning: 'Le disque virtuel de {distro} sera compacté après l’arrêt de WSL.',
+  forceShutdownWarning: 'WSL s’arrête même si une opération est en cours. Le travail en cours peut perdre des données.',
+  shutdownWarning: 'Toutes les distributions WSL en cours seront arrêtées.', compactDisk: 'Compacter le disque virtuel',
+  setVersionWarning: 'La conversion peut prendre du temps ou échouer. Sauvegarde les fichiers importants avant de changer la version WSL.',
+  installDistribution: 'Installer une distribution', onlineCatalog: 'Catalogue en ligne', selectDistribution: 'Choisir une distribution', exportDistribution: 'Exporter la distribution', exportTo: 'Exporter l’archive vers',
+  importDistribution: 'Importer une distribution', importArchive: 'Importer une archive TAR', distroName: 'Nom de la nouvelle distribution', installLocation: 'Dossier d’installation', versionLabel: 'Version WSL',
+  moveDistro: 'Déplacer la distribution', resizeDisk: 'Redimensionner le disque virtuel', enableSparse: 'Activer le mode sparse', disableSparse: 'Désactiver le mode sparse',
+  moveWarning: 'Cette opération déplace {distro} vers un autre dossier et peut durer plusieurs minutes. Vérifie l’espace libre à destination.',
+  resizeWarning: 'Cette opération arrête toutes les distributions WSL avant de modifier la taille du disque virtuel de {distro}.',
+  operationSection: 'Opérations sur les distributions', manageSection: 'Gérer la distribution', pathPlaceholder: 'Par exemple : D:\\WSL\\Ubuntu', archivePlaceholder: 'Par exemple : D:\\Sauvegardes\\Ubuntu.tar', usernamePlaceholder: 'Nom d’utilisateur Linux',
+  noCatalogItems: 'La liste des distributions en ligne est indisponible ou vide.', loadCatalog: 'Charger le catalogue en ligne',
+  defaultUserWarning: 'Cette action vérifie l’utilisateur Linux puis écrit le compte par défaut dans /etc/wsl.conf en tant que root. Redémarre cette distribution pour appliquer le changement.',
+  globalConfig: 'Réglages globaux WSL', distributionConfig: 'Réglages de {distro}', editConfig: 'Modifier la configuration', saveConfig: 'Enregistrer la configuration',
+  configNotice: 'La configuration peut modifier le démarrage, le réseau, l’accès aux fichiers ou exécuter des commandes en root au lancement. N’enregistre que des réglages que tu comprends. Un arrêt complet de WSL peut être nécessaire pour appliquer les changements.',
+  configSaved: 'Configuration WSL enregistrée. Redémarre WSL ou la distribution concernée pour appliquer les changements.',
+  runningCount: '{running} en cours sur {total} distributions', defaultWslVersion: 'Version WSL par défaut', setDefaultWslVersion: 'Définir la version par défaut sur WSL {version}',
+  updateWsl: 'Mettre WSL à jour', updateWslWarning: 'Cette action télécharge et installe le paquet WSL actuel. Les distributions en cours peuvent devoir être redémarrées.',
+  defaultVersionWarning: 'Ce réglage s’applique aux prochaines installations. Il ne convertit pas les distributions existantes.',
+  searchDistributions: 'Rechercher une distribution', stateFilter: 'État', versionFilter: 'Version WSL', allDistributions: 'Toutes', runningFilter: 'En cours', stoppedFilter: 'Arrêtées', noFilteredDistributions: 'Aucune distribution ne correspond à ces filtres.',
+  sourceFilter: 'Source', source: 'Source', storeSource: 'Microsoft Store', importedSource: 'Importée', unknownSource: 'Inconnue', virtualDiskSize: 'Fichier du disque virtuel',
+  vmMemory: 'Mémoire de la VM WSL (partagée)', wsl2Required: 'Cette opération nécessite une distribution WSL 2.', gpuSupport: 'Prise en charge GPU WSL', gpuAvailable: 'Disponible', gpuUnavailable: 'Indisponible', directXGpu: 'Périphérique GPU DirectX', cudaLibrary: 'Bibliothèque NVIDIA CUDA', nvidiaToolkit: 'NVIDIA Container Toolkit', cdiSpec: 'Spécification NVIDIA CDI', remoteDesktop: 'Ouvrir le bureau xrdp',
+  cloneDistro: 'Cloner la distribution', renameDistro: 'Renommer la distribution', cloneName: 'Nom de la copie', cloneLocation: 'Dossier d’installation de la copie', cloneWarning: 'La distribution source sera exportée puis importée sous un nouveau nom. L’opération peut demander beaucoup d’espace disque et durer longtemps.', renameWarning: 'Une copie complète sera créée et vérifiée avant la désinscription de l’originale. Prévois assez d’espace libre. En cas d’échec de suppression, les deux distributions restent disponibles.',
+  defaultDistro: 'Distribution par défaut', cpuPerDistroUnavailable: 'WSL ne fournit pas de mesure CPU fiable pour chaque distribution.',
 };
 
 const partial: Partial<Record<string, Partial<MonitorMessages>>> = {

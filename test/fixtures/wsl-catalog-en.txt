@@ -1,0 +1,7 @@
+The following is a list of valid distributions that can be installed.
+Install using 'wsl.exe --install <Distro>'.
+
+NAME                            FRIENDLY NAME
+Ubuntu                          Ubuntu
+Debian                          Debian GNU/Linux
+openSUSE-Leap-15.6              openSUSE Leap 15.6

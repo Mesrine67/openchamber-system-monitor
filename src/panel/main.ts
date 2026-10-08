@@ -11,13 +11,15 @@ import { describeUnavailable, diskName, formatBytes, formatCores, formatNumber, 
 import { startFrame, type FrameContext } from '../frame/host.ts';
 import { sparkline, sparklineFromValues, SPARKLINE_CSS } from '../frame/sparkline.ts';
 import { BASE_CSS, element, installStyle, toneFor } from '../frame/ui.ts';
+import { renderWslView } from './wsl-view.ts';
+import type { WslAction, WslCatalog, WslConfigDocument, WslConfigTarget, WslJob, WslSnapshot } from '../shared/wsl.ts';
 import {
   busiestGpu, DEFAULT_MONITOR_SETTINGS, diskPercent, fullestDisk, normalizeMonitorSettings,
   type MonitorSettings, type ProcessEntry, type Stats, type Warning,
 } from '../shared/stats.ts';
 
 const SETTINGS_KEY = 'system-monitor.settings.v2';
-const TABS = ['overview', 'performance', 'storage', 'hardware', 'health', 'optimization', 'settings'] as const;
+const TABS = ['overview', 'performance', 'storage', 'hardware', 'health', 'optimization', 'wsl', 'settings'] as const;
 type TabId = typeof TABS[number];
 
 installStyle(`${BASE_CSS}${SPARKLINE_CSS}
@@ -41,9 +43,10 @@ html,body{height:100%;min-height:100%;background:var(--oc-bg);overflow:auto}
 .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:8px}.info-block{display:flex;flex-direction:column;gap:7px}.process-table{display:flex;flex-direction:column;gap:5px}.process-row{display:grid;grid-template-columns:minmax(90px,1fr) auto 56px 64px;gap:8px;align-items:center;font-size:11px}.process-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.process-row+.process-row{border-top:1px solid var(--oc-border);padding-top:5px}.empty{padding:12px;color:var(--oc-muted);border:1px dashed var(--oc-border);border-radius:var(--oc-radius,8px)}
 .recommendation{padding:9px 10px;border:1px solid var(--oc-border);border-radius:var(--oc-radius,8px);display:flex;flex-direction:column;gap:6px}.recommendation strong{font-size:12px}.settings-group{display:flex;flex-direction:column;gap:9px}.select-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,225px),1fr));gap:10px}.select-field{display:flex;flex-direction:column;gap:5px;min-width:0}.switch-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:8px}.settings-note{border-left:2px solid var(--oc-info);padding:7px 9px;color:var(--oc-muted);font-size:11px;background:color-mix(in srgb,var(--oc-info) 5%,transparent)}
 .loading{min-height:140px;display:grid;place-items:center}.header [data-tone=success]{color:var(--oc-success-text)}
+.wsl-view{gap:10px}.wsl-section-head,.wsl-summary,.wsl-distro-header,.wsl-actions,.wsl-confirm-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.wsl-section-head{justify-content:space-between}.wsl-summary{justify-content:space-between;padding:8px 10px;border:1px solid var(--oc-border);border-radius:var(--oc-radius,8px)}.wsl-list{display:flex;flex-direction:column;gap:8px}.wsl-distro{gap:8px}.wsl-distro-header .card-title{min-width:0;overflow-wrap:anywhere}.wsl-default-label{font-size:10px;color:var(--oc-primary-text)}.wsl-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:5px 10px}.wsl-detail-heading{grid-column:1/-1;margin:4px 0 0}.wsl-actions{padding-top:3px;border-top:1px solid var(--oc-border)}.wsl-action{display:inline-flex}.wsl-status{border-left:2px solid var(--oc-info);padding:7px 9px;color:var(--oc-info-text);background:color-mix(in srgb,var(--oc-info) 6%,transparent);font-size:11px}.wsl-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));align-items:end;gap:8px}.wsl-fields>.wsl-action{align-self:end}.wsl-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,155px),1fr));gap:8px;align-items:end}.wsl-config-card{gap:10px}.wsl-config-field{min-width:0}.wsl-config-field textarea.oc-sdk-input{min-height:280px;resize:vertical;tab-size:2}.wsl-confirm{color:var(--oc-fg);background:var(--oc-bg);border:1px solid var(--oc-border);border-radius:var(--oc-radius,8px);padding:16px;max-width:min(480px,calc(100vw - 32px));box-shadow:0 18px 50px #0005}.wsl-confirm::backdrop{background:#0008}.wsl-confirm-form{display:flex;flex-direction:column;gap:10px}.wsl-confirm-actions{justify-content:flex-end}
 .skeleton{height:68px;border-radius:var(--oc-radius,8px);background:var(--oc-subtle);opacity:.7}.refreshing{animation:refresh-pulse 180ms ease-out}@keyframes refresh-pulse{50%{opacity:.7}}
 @container (min-width:720px){.page .grid{grid-template-columns:repeat(4,minmax(0,1fr))}.page .wide-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:520px){.updated{display:none}.header{gap:5px;padding:8px}.header-actions{gap:2px}.content{padding:9px}.process-row{grid-template-columns:minmax(72px,1fr) auto 48px 54px;font-size:10px}.metric-value{font-size:17px}}
+@media(max-width:520px){.updated{display:none}.header{gap:5px;padding:8px}.header-actions{gap:2px}.content{padding:9px}.process-row{grid-template-columns:minmax(72px,1fr) auto 48px 54px;font-size:10px}.metric-value{font-size:17px}.wsl-filters{grid-template-columns:1fr 1fr}.wsl-filters>div:first-child{grid-column:1/-1}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 `);
 
@@ -60,6 +63,17 @@ let lastLocale = '';
 let lastSurface = '';
 let loadingSettings = false;
 let settingsLoaded = false;
+let wslSnapshot: WslSnapshot | null = null;
+let wslCatalog: WslCatalog | null = null;
+let wslLoading = false;
+let wslCatalogLoading = false;
+let wslBusy = false;
+let wslJobId: string | null = null;
+let wslJobPollActive = false;
+let wslStatusMessage: string | null = null;
+let wslConfig: WslConfigDocument | null = null;
+let wslConfigLoading = false;
+let wslRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const shell = element('div', 'shell');
 const header = element('header', 'header');
@@ -99,7 +113,7 @@ root.replaceChildren(shell);
 const tabLabels = (tm: MonitorMessages) => [
   { id: 'overview', label: tm.overview }, { id: 'performance', label: tm.performance },
   { id: 'storage', label: tm.storage }, { id: 'hardware', label: tm.hardware },
-  { id: 'health', label: tm.health }, { id: 'optimization', label: tm.optimization }, { id: 'settings', label: tm.settings },
+  { id: 'health', label: tm.health }, { id: 'optimization', label: tm.optimization }, { id: 'wsl', label: tm.wsl }, { id: 'settings', label: tm.settings },
 ];
 const tabs: TabsHandle = mountTabs(tabsSlot, {
   items: tabLabels(monitorMessagesFor('en')), activeId: activeTab, trackBackground: true,
@@ -599,11 +613,195 @@ const renderSettings = (tm: MonitorMessages, t: Messages): HTMLElement => {
   return view;
 };
 
+const renderWslTab = (): void => {
+  if (!current) return;
+  const view = renderWslView({
+    snapshot: wslSnapshot,
+    loading: wslLoading,
+    busy: wslBusy,
+    statusMessage: wslStatusMessage,
+    catalog: wslCatalog,
+    catalogLoading: wslCatalogLoading,
+    config: wslConfig,
+    configLoading: wslConfigLoading,
+    t: current.t,
+    tm: current.tm,
+    locale: current.locale,
+    onRefresh: () => { void refreshWslSnapshot(); },
+    onLoadCatalog: () => { void refreshWslCatalog(); },
+    onAction: (action) => { void runWslActionFromPanel(action); },
+    onLoadConfig: (target) => { void loadWslConfig(target); },
+    onSaveConfig: (target, text) => { void saveWslConfig(target, text); },
+  });
+  content.replaceChildren(view);
+  renderedTab = 'wsl';
+};
+
+const loadWslConfig = async (target: WslConfigTarget): Promise<void> => {
+  if (!current || activeTab !== 'wsl' || wslConfigLoading) return;
+  const host = current.host;
+  wslConfigLoading = true;
+  renderWslTab();
+  try {
+    const query = new URLSearchParams({ kind: target.kind });
+    if (target.kind === 'distribution') query.set('distro', target.distro);
+    const response = await host.serviceRequest({ method: 'GET', path: `/wsl/config?${query.toString()}` });
+    const body = JSON.parse(response.body) as WslConfigDocument | { error?: string };
+    if (response.status !== 200 || !('text' in body)) throw new Error('error' in body ? body.error : 'WSL configuration could not be loaded.');
+    wslConfig = body;
+    wslStatusMessage = null;
+  } catch (error) {
+    wslStatusMessage = error instanceof Error ? error.message : current.tm.actionFailed;
+    await host.toast({ kind: 'error', message: wslStatusMessage }).catch(() => undefined);
+  } finally {
+    wslConfigLoading = false;
+    renderWslTab();
+  }
+};
+
+const saveWslConfig = async (target: WslConfigTarget, text: string): Promise<void> => {
+  if (!current || activeTab !== 'wsl' || wslBusy) return;
+  const host = current.host;
+  const confirmation = target.kind === 'global' ? 'SAVE GLOBAL WSL CONFIG' : `SAVE WSL CONFIG ${target.distro}`;
+  wslBusy = true;
+  renderWslTab();
+  try {
+    const response = await host.serviceRequest({
+      method: 'POST', path: '/wsl/config',
+      body: JSON.stringify({ ...target, text, confirmation }),
+    });
+    const result = JSON.parse(response.body) as { ok?: boolean; message?: string };
+    if (response.status !== 200 || !result.ok) throw new Error(result.message ?? current.tm.actionFailed);
+    wslConfig = { target, text, exists: true };
+    wslStatusMessage = current.tm.configSaved;
+    await host.toast({ kind: 'success', message: current.tm.configSaved }).catch(() => undefined);
+  } catch (error) {
+    wslStatusMessage = error instanceof Error ? error.message : current.tm.actionFailed;
+    await host.toast({ kind: 'error', message: wslStatusMessage }).catch(() => undefined);
+  } finally {
+    wslBusy = false;
+    renderWslTab();
+  }
+};
+
+const setWslAutoRefresh = (enabled: boolean): void => {
+  if (wslRefreshTimer) clearInterval(wslRefreshTimer);
+  wslRefreshTimer = null;
+  if (enabled) {
+    wslRefreshTimer = setInterval(() => {
+      if (activeTab === 'wsl' && document.visibilityState === 'visible' && !wslLoading && !wslBusy) void refreshWslSnapshot();
+    }, 30_000);
+  }
+};
+
+const refreshWslCatalog = async (): Promise<void> => {
+  if (!current || activeTab !== 'wsl' || wslCatalogLoading) return;
+  const host = current.host;
+  wslCatalogLoading = true;
+  renderWslTab();
+  try {
+    const response = await host.serviceRequest({ method: 'GET', path: '/wsl/catalog?refresh=1' });
+    if (response.status !== 200) throw new Error(`WSL catalog request failed (${response.status})`);
+    wslCatalog = JSON.parse(response.body) as WslCatalog;
+  } catch (error) {
+    wslCatalog = { supported: false, items: [], error: error instanceof Error ? error.message : 'WSL catalog unavailable.' };
+  } finally {
+    wslCatalogLoading = false;
+    renderWslTab();
+  }
+};
+
+const refreshWslSnapshot = async (): Promise<void> => {
+  if (!current || activeTab !== 'wsl' || wslLoading) return;
+  const host = current.host;
+  wslLoading = true;
+  wslStatusMessage = null;
+  renderWslTab();
+  try {
+    const response = await host.serviceRequest({ method: 'GET', path: '/wsl' });
+    if (response.status !== 200) throw new Error(`WSL request failed (${response.status})`);
+    wslSnapshot = JSON.parse(response.body) as WslSnapshot;
+  } catch (error) {
+    wslStatusMessage = error instanceof Error ? error.message : current?.tm.wslUnavailable ?? 'WSL request failed';
+    wslSnapshot = {
+      supported: false, reason: 'failed', version: null, defaultVersion: null, kernelVersion: null, wslgVersion: null,
+      memoryUsedBytes: null, memoryTotalBytes: null, distributions: [], sampledAt: Date.now(), error: wslStatusMessage,
+    };
+  } finally {
+    wslLoading = false;
+    renderWslTab();
+  }
+};
+
+const pollWslJob = async (jobId: string): Promise<void> => {
+  if (wslJobPollActive) return;
+  wslJobPollActive = true;
+  try {
+    while (wslJobId === jobId && current && activeTab === 'wsl' && document.visibilityState === 'visible') {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (wslJobId !== jobId || !current || activeTab !== 'wsl' || document.visibilityState !== 'visible') return;
+      let response: { status: number; body: string };
+      try { response = await current.host.serviceRequest({ method: 'GET', path: `/wsl/jobs/${jobId}` }); }
+      catch { continue; }
+      if (response.status !== 200) continue;
+      const job = JSON.parse(response.body) as WslJob;
+      if (job.state === 'running') continue;
+      wslJobId = null;
+      wslBusy = false;
+      wslStatusMessage = job.message;
+      const host = current.host;
+      await host.toast({ kind: job.state === 'succeeded' ? 'success' : 'error', message: job.message }).catch(() => undefined);
+      renderWslTab();
+      if (job.state === 'succeeded') await refreshWslSnapshot();
+      return;
+    }
+  } finally {
+    wslJobPollActive = false;
+  }
+};
+
+const resumeWslJobPolling = (): void => {
+  if (wslJobId) void pollWslJob(wslJobId);
+};
+
+const runWslActionFromPanel = async (action: WslAction): Promise<void> => {
+  if (!current || wslBusy) return;
+  const host = current.host;
+  wslBusy = true;
+  wslStatusMessage = current.tm.actionInProgress;
+  renderWslTab();
+  try {
+    const response = await host.serviceRequest({ method: 'POST', path: '/wsl/action', body: JSON.stringify(action) });
+    const body = JSON.parse(response.body) as WslJob | { ok?: boolean; message?: string };
+    if (response.status !== 202 || !('id' in body) || typeof body.id !== 'string') {
+      wslBusy = false;
+      wslStatusMessage = body.message ?? current?.tm.actionFailed ?? 'WSL action failed';
+      await host.toast({ kind: 'error', message: wslStatusMessage }).catch(() => undefined);
+      renderWslTab();
+      return;
+    }
+    wslJobId = body.id;
+    wslStatusMessage = current?.tm.actionInProgress ?? 'Working…';
+    renderWslTab();
+    resumeWslJobPolling();
+  } catch (error) {
+    wslBusy = false;
+    wslStatusMessage = error instanceof Error ? error.message : current?.tm.actionFailed ?? 'WSL action failed';
+    await host.toast({ kind: 'error', message: wslStatusMessage }).catch(() => undefined);
+    renderWslTab();
+  }
+};
+
 const changeTab = (id: string): void => {
   if (!TABS.includes(id as TabId)) return;
   activeTab = id as TabId;
+  setWslAutoRefresh(activeTab === 'wsl');
   tabs.update({ items: tabLabels(current?.tm ?? monitorMessagesFor('en')), activeId: activeTab, trackBackground: true, onChange: changeTab });
   renderActive();
+  if (activeTab === 'wsl') {
+    if (!wslSnapshot) void refreshWslSnapshot();
+    resumeWslJobPolling();
+  }
 };
 
 const patchNode = (target: Node, source: Node): Node => {
@@ -643,6 +841,10 @@ let renderedTab: TabId | null = null;
 
 const renderActive = (): void => {
   if (!current) return;
+  if (activeTab === 'wsl') {
+    renderWslTab();
+    return;
+  }
   const { state, t, tm, locale } = current;
   if (state.kind === 'loading') {
     const loading = element('div', 'loading'); mountSpinner(loading, { size: 'default', label: t.measuring });
@@ -717,6 +919,12 @@ startFrame((frame) => {
   current = frame;
   if (frame.state.kind === 'ready') lastStats = frame.state.stats;
   syncHeader();
+  if (activeTab === 'wsl') {
+    if (contextChanged || renderedTab !== 'wsl') renderActive();
+    resumeWslJobPolling();
+    if (!wslRefreshTimer) setWslAutoRefresh(true);
+    return;
+  }
   if (frame.state.kind !== 'ready' || activeTab !== 'settings' || contextChanged) renderActive();
 }, {
   onStats: (_stats, client) => { void loadSettings(client); },

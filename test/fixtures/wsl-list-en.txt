@@ -1,0 +1,4 @@
+  NAME                   STATE           VERSION
+* Ubuntu                 Running         2
+  FedoraLinux-44         Stopped         2
+  Debian                 Stopped         1

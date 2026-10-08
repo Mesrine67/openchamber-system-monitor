@@ -1,5 +1,6 @@
 // src/service/main.ts
 import http from "node:http";
+import { randomUUID as randomUUID2 } from "node:crypto";
 
 // src/service/collectors/cpu-mem.ts
 import os from "node:os";
@@ -2227,6 +2228,726 @@ var createSampler = (deps) => {
   };
 };
 
+// src/shared/wsl.ts
+var safeDistroName = (value) => typeof value === "string" && value.trim().length > 0 && value.length <= 128 && !/[\u0000-\u001f\u007f/\\]/.test(value) && !value.startsWith("-");
+var safeWindowsPath = (value) => {
+  if (typeof value !== "string" || value.length <= 3 || value.length > 240 || !/^[A-Za-z]:\\/.test(value) || /[\u0000-\u001f\u007f"<>|?*]/.test(value))
+    return false;
+  const segments = value.slice(3).split(/[\\/]/);
+  return segments.length > 0 && segments.every((part) => part.length > 0 && part !== "." && part !== ".." && !part.includes(":") && !part.endsWith(".") && !part.endsWith(" ") && !/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/i.test(part));
+};
+var record = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var parseWslAction = (value) => {
+  if (!record(value) || typeof value.action !== "string")
+    return null;
+  const distro = value.distro;
+  const isDistro = safeDistroName(distro);
+  const confirmation = typeof value.confirmation === "string" ? value.confirmation : "";
+  switch (value.action) {
+    case "start":
+    case "stop":
+    case "restart":
+    case "set-default":
+    case "open-terminal":
+    case "open-files":
+    case "open-vscode":
+    case "open-rdp":
+      return isDistro ? { action: value.action, distro } : null;
+    case "set-version":
+      return isDistro && (value.version === 1 || value.version === 2) && confirmation === `SET VERSION ${distro} ${value.version}` ? { action: "set-version", distro, version: value.version, confirmation } : null;
+    case "set-default-version":
+      return (value.version === 1 || value.version === 2) && confirmation === `DEFAULT WSL ${value.version}` ? { action: "set-default-version", version: value.version, confirmation } : null;
+    case "update-wsl":
+      return confirmation === "UPDATE WSL" ? { action: "update-wsl", confirmation } : null;
+    case "set-default-user":
+      return isDistro && typeof value.username === "string" && /^[a-z_][a-z0-9_-]{0,31}$/.test(value.username) && confirmation === `USER ${value.username}` ? { action: "set-default-user", distro, username: value.username, confirmation } : null;
+    case "install":
+      return isDistro ? { action: "install", distro } : null;
+    case "export":
+      return isDistro && safeWindowsPath(value.file) ? { action: "export", distro, file: value.file } : null;
+    case "import":
+      return isDistro && safeWindowsPath(value.location) && safeWindowsPath(value.file) && (value.version === 1 || value.version === 2) ? { action: "import", distro, location: value.location, file: value.file, version: value.version } : null;
+    case "clone":
+    case "rename": {
+      const newDistro = value.newDistro;
+      const expected = typeof newDistro === "string" ? `${value.action.toLocaleUpperCase()} ${distro} AS ${newDistro}` : "";
+      return isDistro && safeDistroName(newDistro) && safeWindowsPath(value.location) && newDistro.toLocaleLowerCase() !== distro.toLocaleLowerCase() && (value.version === 1 || value.version === 2) && confirmation === expected ? { action: value.action, distro, newDistro, location: value.location, version: value.version, confirmation } : null;
+    }
+    case "move":
+      return isDistro && safeWindowsPath(value.location) && confirmation === distro ? { action: "move", distro, location: value.location, confirmation } : null;
+    case "resize":
+      return isDistro && typeof value.size === "string" && /^\d+(?:B|KB|MB|GB|TB)?$/i.test(value.size) && confirmation === `RESIZE ${distro}` ? { action: "resize", distro, size: value.size, confirmation } : null;
+    case "compact":
+      return isDistro && confirmation === `COMPACT ${distro}` ? { action: "compact", distro, confirmation } : null;
+    case "set-sparse":
+      return isDistro && typeof value.enabled === "boolean" ? { action: "set-sparse", distro, enabled: value.enabled } : null;
+    case "shutdown":
+      return confirmation === "SHUTDOWN WSL" ? { action: "shutdown", confirmation } : null;
+    case "force-shutdown":
+      return confirmation === "FORCE SHUTDOWN WSL" ? { action: "force-shutdown", confirmation } : null;
+    case "unregister":
+      return isDistro && confirmation === distro ? { action: "unregister", distro, confirmation } : null;
+    default:
+      return null;
+  }
+};
+var parseWslConfigUpdate = (value) => {
+  if (!record(value) || typeof value.text !== "string" || value.text.length > 16384 || value.text.includes("\x00"))
+    return null;
+  const text = value.text.replace(/\r\n?/g, `
+`);
+  if (value.kind === "global") {
+    return value.confirmation === "SAVE GLOBAL WSL CONFIG" ? { kind: "global", text, confirmation: value.confirmation } : null;
+  }
+  if (value.kind === "distribution" && safeDistroName(value.distro)) {
+    const confirmation = `SAVE WSL CONFIG ${value.distro}`;
+    return value.confirmation === confirmation ? { kind: "distribution", distro: value.distro, text, confirmation } : null;
+  }
+  return null;
+};
+
+// src/service/wsl.ts
+import { execFile as execFile2, spawn as spawn2 } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { lstat, readFile as readFile3, rename, rm, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+
+// src/service/collectors/parse-wsl.ts
+var decodeWslText = (input) => {
+  if (typeof input === "string")
+    return input.replace(/^\uFEFF/, "").replaceAll("\x00", "").replace(/\r/g, "");
+  const bytes = Buffer.from(input);
+  const sample = bytes.subarray(0, Math.min(bytes.length, 64));
+  let zeroes = 0;
+  for (let index = 1;index < sample.length; index += 2)
+    if (sample[index] === 0)
+      zeroes += 1;
+  const utf16le = sample.length > 2 && zeroes / Math.max(1, Math.floor(sample.length / 2)) > 0.35;
+  const text = utf16le ? bytes.toString("utf16le") : bytes.toString("utf8");
+  return text.replace(/^\uFEFF/, "").replaceAll("\x00", "").replace(/\r/g, "");
+};
+var finiteBytes = (value) => {
+  if (!value)
+    return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+};
+var parseWslList = (input) => {
+  const rows = [];
+  for (const rawLine of decodeWslText(input).split(`
+`)) {
+    const line = rawLine.trimEnd();
+    const match = line.match(/^\s*(\*)?\s*(.+?)\s{2,}(.+?)\s{2,}([12])\s*$/);
+    if (!match || !match[2] || !match[3])
+      continue;
+    const name = match[2].trim();
+    const localizedState = match[3].trim().toLocaleLowerCase();
+    if (!name || /^(name|nom)$/i.test(name))
+      continue;
+    const state = /running|run|cours|ex[eé]cut/.test(localizedState) ? "running" : /stopped|stop|arr[eê]t|termin/.test(localizedState) ? "stopped" : "unknown";
+    rows.push({
+      name,
+      source: "unknown",
+      state,
+      version: Number(match[4]) === 1 || Number(match[4]) === 2 ? Number(match[4]) : null,
+      isDefault: match[1] === "*",
+      virtualDiskBytes: null,
+      osName: null,
+      osVersion: null,
+      kernel: null,
+      rootUsedBytes: null,
+      rootTotalBytes: null,
+      processCount: null,
+      gpu: null,
+      remoteDesktopPort: null
+    });
+  }
+  return rows;
+};
+var parseWslVersions = (input) => {
+  const values = new Map;
+  for (const line of decodeWslText(input).split(`
+`)) {
+    const split = line.indexOf(":");
+    if (split < 0)
+      continue;
+    values.set(line.slice(0, split).trim().toLocaleLowerCase(), line.slice(split + 1).trim());
+  }
+  const pick = (...keys) => keys.map((key) => values.get(key)).find((value) => value && value.length > 0) ?? null;
+  return {
+    version: pick("wsl version", "version du wsl", "version wsl"),
+    kernelVersion: pick("kernel version", "version du noyau", "version du kernel"),
+    wslgVersion: pick("wslg version", "version wslg")
+  };
+};
+var parseWslDefaultVersion = (input) => {
+  for (const line of decodeWslText(input).split(`
+`)) {
+    const normalized = line.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase();
+    const match = normalized.match(/^\s*(?:default\s+version|version\s+par\s+defaut|version\s+predeterminada)\s*:\s*([12])\s*$/);
+    if (match?.[1] === "1" || match?.[1] === "2")
+      return Number(match[1]);
+  }
+  return null;
+};
+var parseWslDistroDetails = (input) => {
+  const text = decodeWslText(input);
+  const marker = (name) => {
+    const token = `__${name}__
+`;
+    const start = text.indexOf(token);
+    if (start < 0)
+      return "";
+    const content = text.slice(start + token.length);
+    const end = content.search(/\n__/);
+    return end < 0 ? content : content.slice(0, end);
+  };
+  const os = new Map;
+  for (const line of marker("OS").split(`
+`)) {
+    const match = line.match(/^([A-Z_]+)=(.*)$/);
+    if (match?.[1])
+      os.set(match[1], (match[2] ?? "").replace(/^"|"$/g, ""));
+  }
+  const memory = marker("MEM").match(/^Mem:\s+(\d+)\s+(\d+)\s+(\d+)/m);
+  const disk = marker("DISK").match(/^\S+\s+(\d+)\s+(\d+)\s+(\d+)/m);
+  const kernel = text.match(/\n__KERNEL__=(.*)/)?.[1]?.trim() || null;
+  const processCount = text.match(/\n__PROCS__=(\d+)/)?.[1];
+  const gpuParts = text.match(/(?:^|\n)__GPU__=([01]),([01]),([01]),([01])(?:\n|$)/);
+  const gpu = gpuParts ? {
+    directX: gpuParts[1] === "1",
+    cudaLibrary: gpuParts[2] === "1",
+    nvidiaToolkit: gpuParts[3] === "1",
+    cdiSpec: gpuParts[4] === "1"
+  } : null;
+  const remoteDesktopPortValue = Number(text.match(/(?:^|\n)__XRDP__=(\d{1,5})(?:\n|$)/)?.[1]);
+  const remoteDesktopPort = Number.isInteger(remoteDesktopPortValue) && remoteDesktopPortValue >= 1 && remoteDesktopPortValue <= 65535 ? remoteDesktopPortValue : null;
+  return {
+    osName: os.get("PRETTY_NAME") ?? os.get("NAME") ?? null,
+    osVersion: os.get("VERSION_ID") ?? null,
+    kernel,
+    memoryUsedBytes: finiteBytes(memory?.[2]),
+    memoryTotalBytes: finiteBytes(memory?.[1]),
+    rootUsedBytes: finiteBytes(disk?.[2]),
+    rootTotalBytes: disk?.[1] ? finiteBytes(disk[1]) : null,
+    processCount: finiteBytes(processCount),
+    gpu,
+    remoteDesktopPort
+  };
+};
+var parseWslRegistrationMetadata = (input) => {
+  try {
+    const decoded = decodeWslText(input).trim();
+    if (!decoded)
+      return [];
+    const value = JSON.parse(decoded);
+    const entries = Array.isArray(value) ? value : [value];
+    const result = [];
+    for (const item of entries) {
+      if (typeof item !== "object" || item === null || Array.isArray(item))
+        continue;
+      const row = item;
+      if (typeof row.Name !== "string" || !row.Name.trim() || row.Name.length > 128)
+        continue;
+      const bytes = typeof row.VirtualDiskBytes === "number" && Number.isSafeInteger(row.VirtualDiskBytes) && row.VirtualDiskBytes >= 0 ? row.VirtualDiskBytes : null;
+      result.push({
+        name: row.Name,
+        source: row.Source === "store" || row.Source === "imported" ? row.Source : "unknown",
+        virtualDiskBytes: bytes
+      });
+    }
+    return result;
+  } catch {
+    return [];
+  }
+};
+var parseWslCatalog = (input) => {
+  const items = [];
+  const seen = new Set;
+  for (const line of decodeWslText(input).split(`
+`)) {
+    const match = line.match(/^\s*([A-Za-z0-9][A-Za-z0-9_.-]{0,127})\s{2,}(.+?)\s*$/);
+    if (!match?.[1] || !match[2] || /^(name|nom|install|the)$/i.test(match[1]))
+      continue;
+    const name = match[1];
+    const key = name.toLocaleLowerCase();
+    if (seen.has(key))
+      continue;
+    seen.add(key);
+    items.push({ name, friendlyName: match[2].trim() });
+  }
+  return items;
+};
+
+// src/service/collectors/parse-wsl-conf.ts
+var withDefaultWslUser = (input, username) => {
+  if (!/^[a-z_][a-z0-9_-]{0,31}$/.test(username))
+    throw new Error("Invalid Linux username.");
+  const lines = input.replace(/\r\n?/g, `
+`).split(`
+`);
+  const output = [];
+  let inUserSection = false;
+  let foundUserSection = false;
+  let wroteDefault = false;
+  for (const line of lines) {
+    const section = line.match(/^\s*\[([^\]]+)\]\s*(?:[;#].*)?$/);
+    if (section) {
+      if (inUserSection && !wroteDefault) {
+        output.push(`default=${username}`);
+        wroteDefault = true;
+      }
+      inUserSection = section[1]?.trim().toLocaleLowerCase() === "user";
+      if (inUserSection)
+        foundUserSection = true;
+      wroteDefault = false;
+      output.push(line);
+      continue;
+    }
+    if (inUserSection) {
+      const value = line.match(/^(\s*default\s*=\s*).*$/i);
+      if (value) {
+        output.push(`${value[1]}${username}`);
+        wroteDefault = true;
+        continue;
+      }
+    }
+    output.push(line);
+  }
+  if (inUserSection && !wroteDefault)
+    output.push(`default=${username}`);
+  if (!foundUserSection) {
+    while (output.at(-1) === "")
+      output.pop();
+    if (output.length > 0)
+      output.push("");
+    output.push("[user]", `default=${username}`);
+  }
+  return `${output.join(`
+`).replace(/\n+$/, "")}
+`;
+};
+
+// src/service/wsl.ts
+var root = process.env.SystemRoot ?? process.env.WINDIR ?? "C:\\Windows";
+var wslExe = join(root, "System32", "wsl.exe");
+var knownName = (value) => value.trim().length > 0 && value.length <= 128 && !/[\u0000-\u001f\u007f/\\]/.test(value) && !value.startsWith("-");
+var cleanError = (value) => decodeWslText(value).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 500) || "WSL a retourné une erreur sans détail.";
+var runWsl = (args, timeoutMs = 15000) => new Promise((resolve) => {
+  execFile2(wslExe, args, { encoding: "buffer", timeout: timeoutMs, windowsHide: true, maxBuffer: 2 * 1024 * 1024 }, (error, stdout, stderr) => {
+    const output = decodeWslText(stdout ?? "");
+    if (!error) {
+      resolve({ ok: true, stdout: output });
+      return;
+    }
+    const missing = "code" in error && error.code === "ENOENT";
+    resolve({ ok: false, missing, error: cleanError(decodeWslText(stderr ?? "") || output || error.message) });
+  });
+});
+var unavailable2 = (reason, error) => ({
+  supported: false,
+  reason,
+  version: null,
+  defaultVersion: null,
+  kernelVersion: null,
+  wslgVersion: null,
+  memoryUsedBytes: null,
+  memoryTotalBytes: null,
+  distributions: [],
+  sampledAt: Date.now(),
+  error
+});
+var distroMetadataScript = `$ErrorActionPreference = 'SilentlyContinue'
+$root = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss'
+$rows = @()
+if (Test-Path -LiteralPath $root) {
+  $rows = @(Get-ChildItem -LiteralPath $root | ForEach-Object {
+    $entry = Get-ItemProperty -LiteralPath $_.PSPath
+    $disk = $null
+    $vhd = if ($entry.BasePath) { Join-Path $entry.BasePath 'ext4.vhdx' } else { $null }
+    if ($vhd -and (Test-Path -LiteralPath $vhd)) { $disk = (Get-Item -LiteralPath $vhd).Length }
+    [pscustomobject]@{
+      Name = [string]$entry.DistributionName
+      Source = if ($entry.PackageFamilyName) { 'store' } elseif ($entry.BasePath) { 'imported' } else { 'unknown' }
+      VirtualDiskBytes = $disk
+    }
+  })
+}
+[Console]::Out.WriteLine((ConvertTo-Json -InputObject $rows -Compress))`;
+var metadataCache = null;
+var readRegistrationMetadata = async () => {
+  if (metadataCache && metadataCache.expiresAt > Date.now())
+    return metadataCache.items;
+  const result = await runPowerShell(distroMetadataScript, 12000);
+  const items = new Map;
+  if (result.ok) {
+    for (const row of parseWslRegistrationMetadata(result.stdout)) {
+      items.set(row.name.toLocaleLowerCase(), { source: row.source, virtualDiskBytes: row.virtualDiskBytes });
+    }
+  }
+  metadataCache = { expiresAt: Date.now() + 5 * 60000, items };
+  return items;
+};
+var detailsCache = new Map;
+var enrichDistro = async (distro) => {
+  if (distro.state !== "running")
+    return { distribution: distro, memoryUsedBytes: null, memoryTotalBytes: null };
+  const cacheKey = distro.name.toLocaleLowerCase();
+  const cached = detailsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    const { memoryUsedBytes, memoryTotalBytes, ...details } = cached.details;
+    return { distribution: { ...distro, ...details }, memoryUsedBytes, memoryTotalBytes };
+  }
+  const probe = [
+    'printf "__OS__\\n"; cat /etc/os-release 2>/dev/null || true',
+    'printf "\\n__KERNEL__=%s\\n" "$(uname -r 2>/dev/null)"',
+    'printf "__MEM__\\n"; free -b 2>/dev/null | grep "^Mem:" || true',
+    'printf "__DISK__\\n"; df -B1 / 2>/dev/null | tail -n 1',
+    'printf "__PROCS__=%s\\n" "$(ps -e --no-headers 2>/dev/null | wc -l)"',
+    'printf "__GPU__=%s,%s,%s,%s\\n" "$(test -e /dev/dxg && echo 1 || echo 0)" "$(test -e /usr/lib/wsl/lib/libcuda.so.1 && echo 1 || echo 0)" "$(command -v nvidia-ctk >/dev/null 2>&1 && echo 1 || echo 0)" "$(test -f /etc/cdi/nvidia.yaml && echo 1 || echo 0)"',
+    `printf "__XRDP__=%s\\n" "$(awk -F= '/^[[:space:]]*port[[:space:]]*=/{gsub(/[[:space:]]/, "", $2); if ($2 ~ /^[0-9]+$/) {print $2; exit}}' /etc/xrdp/xrdp.ini 2>/dev/null)"`
+  ].join("; ");
+  const result = await runWsl(["--distribution", distro.name, "--exec", "sh", "-c", probe], 1e4);
+  if (!result.ok)
+    return { distribution: distro, memoryUsedBytes: null, memoryTotalBytes: null };
+  const details = parseWslDistroDetails(result.stdout);
+  detailsCache.set(cacheKey, { expiresAt: Date.now() + 20000, details });
+  const { memoryUsedBytes, memoryTotalBytes, ...distributionDetails } = details;
+  return { distribution: { ...distro, ...distributionDetails }, memoryUsedBytes, memoryTotalBytes };
+};
+var readWslSnapshot = async () => {
+  if (process.platform !== "win32")
+    return unavailable2("unsupported", "La gestion WSL est disponible lorsque le service OpenChamber tourne sur Windows.");
+  const [versionResult, listResult, statusResult, metadata] = await Promise.all([
+    runWsl(["--version"]),
+    runWsl(["--list", "--verbose"]),
+    runWsl(["--status"]),
+    readRegistrationMetadata()
+  ]);
+  if (listResult.ok === false) {
+    return unavailable2(listResult.missing ? "tool-missing" : "failed", listResult.error);
+  }
+  const version = versionResult.ok ? parseWslVersions(versionResult.stdout) : { version: null, kernelVersion: null, wslgVersion: null };
+  const distributions = parseWslList(listResult.stdout).map((distro) => ({
+    ...distro,
+    ...metadata.get(distro.name.toLocaleLowerCase()) ?? {}
+  }));
+  const enriched = new Array(distributions.length);
+  let nextIndex = 0;
+  await Promise.all(Array.from({ length: Math.min(3, distributions.length) }, async () => {
+    while (nextIndex < distributions.length) {
+      const index = nextIndex++;
+      const distro = distributions[index];
+      if (distro)
+        enriched[index] = await enrichDistro(distro);
+    }
+  }));
+  const vmMemory = enriched.find((entry) => entry?.distribution.state === "running" && entry.distribution.version === 2 && entry.memoryTotalBytes !== null);
+  return {
+    supported: true,
+    reason: null,
+    ...version,
+    defaultVersion: statusResult.ok ? parseWslDefaultVersion(statusResult.stdout) : null,
+    memoryUsedBytes: vmMemory?.memoryUsedBytes ?? null,
+    memoryTotalBytes: vmMemory?.memoryTotalBytes ?? null,
+    distributions: enriched.map((entry) => entry?.distribution).filter((entry) => entry !== undefined),
+    sampledAt: Date.now(),
+    error: versionResult.ok ? null : versionResult.error
+  };
+};
+var catalogCache = null;
+var readWslCatalog = async (force = false) => {
+  if (process.platform !== "win32")
+    return { supported: false, items: [], error: "La liste des distributions WSL est disponible sur Windows." };
+  if (!force && catalogCache && catalogCache.expiresAt > Date.now())
+    return catalogCache.value;
+  const result = await runWsl(["--list", "--online"], 30000);
+  const value = result.ok ? { supported: true, items: parseWslCatalog(result.stdout), error: null } : { supported: false, items: [], error: result.error };
+  catalogCache = { value, expiresAt: Date.now() + 5 * 60000 };
+  return value;
+};
+var readWslConfig = async (kind, distro) => {
+  if (process.platform !== "win32")
+    throw new Error("WSL configuration is available when the OpenChamber service runs on Windows.");
+  if (kind === "global") {
+    const path = join(process.env.USERPROFILE || homedir(), ".wslconfig");
+    try {
+      return { target: { kind }, exists: true, text: await readFile3(path, "utf8") };
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT")
+        return { target: { kind }, exists: false, text: "" };
+      throw error;
+    }
+  }
+  if (!distro || !knownName(distro))
+    throw new Error("Invalid WSL distribution.");
+  const result = await runWsl([
+    "--distribution",
+    distro,
+    "--user",
+    "root",
+    "--exec",
+    "sh",
+    "-c",
+    'if [ -f /etc/wsl.conf ]; then printf "__EXISTS__\\n"; cat /etc/wsl.conf; else printf "__MISSING__\\n"; fi'
+  ]);
+  if (!result.ok)
+    throw new Error(result.error);
+  const marker = result.stdout.indexOf(`__EXISTS__
+`);
+  if (marker < 0)
+    return { target: { kind, distro }, exists: false, text: "" };
+  return { target: { kind, distro }, exists: true, text: result.stdout.slice(marker + `__EXISTS__
+`.length) };
+};
+var saveWslConfig = async (update) => {
+  if (process.platform !== "win32")
+    throw new Error("WSL configuration is available when the OpenChamber service runs on Windows.");
+  if (Buffer.byteLength(update.text, "utf8") > 16384 || update.text.includes("\x00"))
+    throw new Error("WSL configuration must be at most 16 KB and cannot contain NUL characters.");
+  if (update.kind === "global") {
+    const path = join(process.env.USERPROFILE || homedir(), ".wslconfig");
+    const temporary = join(dirname(path), `.wslconfig.${randomUUID()}.tmp`);
+    try {
+      await writeFile(temporary, update.text, { encoding: "utf8", flag: "wx" });
+      await rename(temporary, path);
+    } catch (error) {
+      await rm(temporary, { force: true }).catch(() => {
+        return;
+      });
+      throw error;
+    }
+    return;
+  }
+  if (!knownName(update.distro))
+    throw new Error("Invalid WSL distribution.");
+  const encoded = Buffer.from(update.text, "utf8").toString("base64");
+  const script = `set -eu
+temporary="$(mktemp /etc/wsl.conf.XXXXXX)"
+trap 'rm -f "$temporary"' EXIT
+printf '%s' "$1" | base64 -d > "$temporary"
+chmod 644 "$temporary"
+mv -f "$temporary" /etc/wsl.conf
+trap - EXIT`;
+  const result = await runWsl(["--distribution", update.distro, "--user", "root", "--exec", "sh", "-c", script, "sh", encoded]);
+  if (!result.ok)
+    throw new Error(result.error);
+};
+var launchDetached = (command, args) => new Promise((resolve) => {
+  const child = spawn2(command, args, { detached: true, stdio: "ignore", windowsHide: true, shell: false });
+  child.once("error", (error) => resolve({ ok: false, message: cleanError(error.message) }));
+  child.once("spawn", () => {
+    child.unref();
+    resolve({ ok: true, message: "Commande lancée." });
+  });
+});
+var failed = (result) => ({ ok: false, message: result.error });
+var success = (message) => ({ ok: true, message });
+var pathExists = async (path) => {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT")
+      return false;
+    throw error;
+  }
+};
+var isKnownDistro = async (name) => {
+  const result = await runWsl(["--list", "--verbose"]);
+  if (!result.ok)
+    return null;
+  return parseWslList(result.stdout).some(({ name: installed }) => installed.toLocaleLowerCase() === name.toLocaleLowerCase());
+};
+var createWslCopy = async (source, newDistro, location, version) => {
+  if (await pathExists(location))
+    return { ok: false, message: "Le dossier de destination existe déjà. Choisis un nouveau dossier." };
+  const parentExists = await lstat(dirname(location)).then((stat) => stat.isDirectory()).catch(() => false);
+  if (!parentExists)
+    return { ok: false, message: "Le dossier parent doit déjà exister." };
+  const alreadyInstalled = await isKnownDistro(newDistro);
+  if (alreadyInstalled === null)
+    return { ok: false, message: "Impossible de vérifier les distributions déjà installées." };
+  if (alreadyInstalled)
+    return { ok: false, message: `${newDistro} existe déjà.` };
+  const archive = join(dirname(location), `.openchamber-wsl-copy-${randomUUID()}.tar`);
+  const exported = await runWsl(["--export", source, archive], 900000);
+  if (!exported.ok) {
+    await rm(archive, { force: true }).catch(() => {
+      return;
+    });
+    return failed(exported);
+  }
+  const imported = await runWsl(["--import", newDistro, location, archive, "--version", String(version)], 900000);
+  if (!imported.ok)
+    return { ok: false, message: `${imported.error} L’archive de secours est conservée ici : ${archive}` };
+  try {
+    await rm(archive);
+  } catch {
+    return success(`${newDistro} créée. L’archive temporaire n’a pas pu être supprimée : ${archive}`);
+  }
+  return success(`${newDistro} créée.`);
+};
+var distroPortProbe = `awk -F= '/^[[:space:]]*port[[:space:]]*=/{gsub(/[[:space:]]/, "", $2); if ($2 ~ /^[0-9]+$/) {print $2; exit}}' /etc/xrdp/xrdp.ini 2>/dev/null`;
+var openDistroTerminal = (distro) => launchDetached("wt.exe", ["-w", "0", "new-tab", "--", wslExe, "--distribution", distro]);
+var runWslAction = async (action) => {
+  if (process.platform !== "win32")
+    return { ok: false, message: "Cette action nécessite le service OpenChamber sur Windows." };
+  if ("distro" in action && !knownName(action.distro))
+    return { ok: false, message: "Nom de distribution invalide." };
+  const run = (args, timeout = 30000) => runWsl(args, timeout);
+  switch (action.action) {
+    case "start": {
+      const result = await openDistroTerminal(action.distro);
+      return result.ok ? success(`${action.distro} démarrée dans Windows Terminal.`) : result;
+    }
+    case "stop": {
+      const result = await run(["--terminate", action.distro]);
+      return result.ok ? success(`${action.distro} arrêtée.`) : failed(result);
+    }
+    case "restart": {
+      const stop = await run(["--terminate", action.distro]);
+      if (!stop.ok)
+        return failed(stop);
+      const start = await openDistroTerminal(action.distro);
+      return start.ok ? success(`${action.distro} redémarrée dans Windows Terminal.`) : start;
+    }
+    case "set-default": {
+      const result = await run(["--set-default", action.distro]);
+      return result.ok ? success(`${action.distro} est la distribution par défaut.`) : failed(result);
+    }
+    case "set-default-version": {
+      const result = await run(["--set-default-version", String(action.version)]);
+      return result.ok ? success(`WSL ${action.version} sera la version utilisée pour les nouvelles distributions.`) : failed(result);
+    }
+    case "update-wsl": {
+      const result = await run(["--update", "--web-download"], 900000);
+      return result.ok ? success("La mise à jour de WSL est terminée. Redémarre WSL si Windows le demande.") : failed(result);
+    }
+    case "set-version": {
+      const result = await run(["--set-version", action.distro, String(action.version)], 600000);
+      return result.ok ? success(`${action.distro} convertie en WSL ${action.version}.`) : failed(result);
+    }
+    case "set-default-user": {
+      const target = ["--distribution", action.distro, "--user", "root", "--exec"];
+      const userCheck = await run([...target, "id", "-u", action.username]);
+      if (!userCheck.ok)
+        return failed(userCheck);
+      const readConfig = await run([...target, "sh", "-c", "if [ -f /etc/wsl.conf ]; then cat /etc/wsl.conf; fi"]);
+      if (!readConfig.ok)
+        return failed(readConfig);
+      if (Buffer.byteLength(readConfig.stdout, "utf8") > 24 * 1024) {
+        return { ok: false, message: "/etc/wsl.conf dépasse la taille prise en charge (24 Ko)." };
+      }
+      const encodedConfig = Buffer.from(withDefaultWslUser(readConfig.stdout, action.username), "utf8").toString("base64");
+      const writeConfig = `set -eu
+temporary="$(mktemp /etc/wsl.conf.XXXXXX)"
+trap 'rm -f "$temporary"' EXIT
+printf '%s' "$1" | base64 -d > "$temporary"
+chmod 600 "$temporary"
+mv -f "$temporary" /etc/wsl.conf
+trap - EXIT`;
+      const result = await run([...target, "sh", "-c", writeConfig, "sh", encodedConfig]);
+      return result.ok ? success(`Utilisateur par défaut configuré pour ${action.distro}. Redémarre la distribution pour appliquer le changement.`) : failed(result);
+    }
+    case "install": {
+      const result = await run(["--install", "--distribution", action.distro, "--no-launch"], 900000);
+      return result.ok ? success(`${action.distro} installée.`) : failed(result);
+    }
+    case "export": {
+      if (await pathExists(action.file))
+        return { ok: false, message: "Le fichier cible existe déjà. Choisis un nouveau chemin pour ne pas l’écraser." };
+      const result = await run(["--export", action.distro, action.file], 900000);
+      return result.ok ? success(`Archive exportée vers ${action.file}.`) : failed(result);
+    }
+    case "import": {
+      if (await pathExists(action.location))
+        return { ok: false, message: "Le dossier d’installation existe déjà. Choisis un nouveau dossier vide." };
+      const source = await lstat(action.file).then((stat) => stat.isFile()).catch(() => false);
+      if (!source)
+        return { ok: false, message: "L’archive d’import est introuvable ou n’est pas un fichier." };
+      const result = await run(["--import", action.distro, action.location, action.file, "--version", String(action.version)], 900000);
+      return result.ok ? success(`${action.distro} importée.`) : failed(result);
+    }
+    case "clone": {
+      if (!knownName(action.newDistro))
+        return { ok: false, message: "Nom de la nouvelle distribution invalide." };
+      const copied = await createWslCopy(action.distro, action.newDistro, action.location, action.version);
+      return copied.ok ? success(`${action.distro} clonée sous ${action.newDistro}.`) : copied;
+    }
+    case "rename": {
+      if (!knownName(action.newDistro) || action.newDistro.toLocaleLowerCase() === action.distro.toLocaleLowerCase()) {
+        return { ok: false, message: "Le nouveau nom de distribution est invalide ou identique à l’ancien." };
+      }
+      const copied = await createWslCopy(action.distro, action.newDistro, action.location, action.version);
+      if (!copied.ok)
+        return copied;
+      const unregister = await run(["--unregister", action.distro], 120000);
+      if (!unregister.ok) {
+        return { ok: false, message: `${action.newDistro} a été créée, mais ${action.distro} n’a pas pu être désinscrite. Les deux distributions restent disponibles. ${unregister.error}` };
+      }
+      return success(`${action.distro} renommée en ${action.newDistro}.`);
+    }
+    case "move": {
+      if (await pathExists(action.location))
+        return { ok: false, message: "Le dossier de destination existe déjà. Choisis un nouveau dossier." };
+      const result = await run(["--manage", action.distro, "--move", action.location], 900000);
+      return result.ok ? success(`${action.distro} déplacée.`) : failed(result);
+    }
+    case "resize": {
+      const shutdown = await run(["--shutdown"], 120000);
+      if (!shutdown.ok)
+        return failed(shutdown);
+      const result = await run(["--manage", action.distro, "--resize", action.size], 600000);
+      return result.ok ? success(`${action.distro} redimensionnée. Les distributions WSL ont été arrêtées.`) : failed(result);
+    }
+    case "compact": {
+      const trim = await run(["--distribution", action.distro, "--user", "root", "--exec", "fstrim", "-av"], 120000);
+      if (!trim.ok)
+        return { ok: false, message: `Impossible de libérer les blocs inutilisés avant la compaction : ${trim.error}` };
+      const shutdown = await run(["--shutdown"], 120000);
+      if (!shutdown.ok)
+        return failed(shutdown);
+      const result = await run(["--manage", action.distro, "--compact"], 600000);
+      return result.ok ? success(`${action.distro} compactée. Les distributions WSL ont été arrêtées.`) : failed(result);
+    }
+    case "set-sparse": {
+      const result = await run(["--manage", action.distro, "--set-sparse", String(action.enabled)]);
+      return result.ok ? success(`Mode sparse ${action.enabled ? "activé" : "désactivé"} pour ${action.distro}.`) : failed(result);
+    }
+    case "shutdown": {
+      const result = await run(["--shutdown"], 120000);
+      return result.ok ? success("Toutes les distributions WSL ont été arrêtées.") : failed(result);
+    }
+    case "force-shutdown": {
+      const result = await run(["--shutdown", "--force"], 120000);
+      return result.ok ? success("Arrêt forcé de WSL terminé.") : failed(result);
+    }
+    case "unregister": {
+      const result = await run(["--unregister", action.distro], 120000);
+      return result.ok ? success(`${action.distro} désinscrite et données de distribution supprimées.`) : failed(result);
+    }
+    case "open-terminal":
+      return openDistroTerminal(action.distro);
+    case "open-files":
+      return launchDetached(join(root, "explorer.exe"), [`\\\\wsl.localhost\\${action.distro}\\`]);
+    case "open-vscode":
+      return launchDetached("code.exe", ["--remote", `wsl+${action.distro}`, "/home"]);
+    case "open-rdp": {
+      const portResult = await run(["--distribution", action.distro, "--exec", "sh", "-c", distroPortProbe], 1e4);
+      if (!portResult.ok)
+        return failed(portResult);
+      const port = Number(portResult.stdout.trim().split(`
+`).at(-1));
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        return { ok: false, message: "Aucun port xrdp valide n’a été détecté dans /etc/xrdp/xrdp.ini." };
+      }
+      return launchDetached(join(root, "System32", "mstsc.exe"), ["/v:localhost:" + port]);
+    }
+  }
+};
+
 // src/service/main.ts
 var port = Number(process.env.OPENCHAMBER_SERVICE_PORT);
 var token = process.env.OPENCHAMBER_SERVICE_TOKEN ?? "";
@@ -2240,6 +2961,14 @@ var now = () => Date.now();
 var settings = structuredClone(DEFAULT_MONITOR_SETTINGS);
 var processCollector = createProcessCollector(platform, now);
 var diskActivity = createDiskActivityCollector(platform, now);
+var wslJobs = new Map;
+var pruneWslJobs = () => {
+  const cutoff = Date.now() - 30 * 60000;
+  for (const [id, job] of wslJobs) {
+    if (job.state !== "running" && (job.finishedAt ?? job.startedAt) < cutoff)
+      wslJobs.delete(id);
+  }
+};
 var sampler = createSampler({
   now,
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -2272,7 +3001,7 @@ var readJsonBody = (req) => new Promise((resolve) => {
     if (failed)
       return;
     size += chunk.length;
-    if (size > 16384) {
+    if (size > 32768) {
       failed = true;
       resolve(null);
       return;
@@ -2319,6 +3048,71 @@ var server = http.createServer((req, res) => {
         sampler.resume();
       send(res, 200, { ok: true });
     });
+    return;
+  }
+  if (pathname === "/wsl" && req.method === "GET") {
+    readWslSnapshot().then((snapshot) => send(res, 200, snapshot), () => send(res, 503, { error: "wsl-unavailable" }));
+    return;
+  }
+  if (pathname === "/wsl/catalog" && req.method === "GET") {
+    readWslCatalog(new URL(req.url ?? "/", "http://127.0.0.1").searchParams.get("refresh") === "1").then((catalog) => send(res, 200, catalog), () => send(res, 503, { supported: false, items: [], error: "La liste des distributions WSL est indisponible." }));
+    return;
+  }
+  if (pathname === "/wsl/config" && req.method === "GET") {
+    const query = new URL(req.url ?? "/", "http://127.0.0.1").searchParams;
+    const kind = query.get("kind") === "distribution" ? "distribution" : "global";
+    const distro = query.get("distro") ?? undefined;
+    readWslConfig(kind, distro).then((document) => send(res, 200, document), (error) => send(res, 400, { error: error instanceof Error ? error.message : "WSL configuration unavailable." }));
+    return;
+  }
+  if (pathname === "/wsl/config" && req.method === "POST") {
+    readJsonBody(req).then(async (value) => {
+      const update = parseWslConfigUpdate(value);
+      if (!update) {
+        send(res, 400, { ok: false, message: "WSL configuration is invalid or its typed confirmation is missing." });
+        return;
+      }
+      try {
+        await saveWslConfig(update);
+        send(res, 200, { ok: true });
+      } catch (error) {
+        send(res, 500, { ok: false, message: error instanceof Error ? error.message : "Could not save WSL configuration." });
+      }
+    });
+    return;
+  }
+  if (pathname === "/wsl/action" && req.method === "POST") {
+    readJsonBody(req).then((value) => {
+      const action = parseWslAction(value);
+      if (!action) {
+        send(res, 400, { ok: false, message: "Action WSL invalide ou confirmation manquante." });
+        return;
+      }
+      pruneWslJobs();
+      if ([...wslJobs.values()].filter((job) => job.state === "running").length >= 3) {
+        send(res, 429, { ok: false, message: "Trop d’opérations WSL sont déjà en cours." });
+        return;
+      }
+      const id = randomUUID2();
+      const job = { id, action: action.action, state: "running", message: "Opération en cours.", startedAt: Date.now(), finishedAt: null };
+      wslJobs.set(id, job);
+      send(res, 202, job);
+      runWslAction(action).then((result) => {
+        job.state = result.ok ? "succeeded" : "failed";
+        job.message = result.message;
+        job.finishedAt = Date.now();
+      }, () => {
+        job.state = "failed";
+        job.message = "L’opération WSL a échoué.";
+        job.finishedAt = Date.now();
+      });
+    });
+    return;
+  }
+  const wslJobMatch = pathname.match(/^\/wsl\/jobs\/([0-9a-f-]{36})$/i);
+  if (wslJobMatch && req.method === "GET") {
+    const job = wslJobs.get(wslJobMatch[1] ?? "");
+    send(res, job ? 200 : 404, job ?? { error: "not-found" });
     return;
   }
   if (pathname === "/open-storage-settings" && req.method === "POST" && platform === "win32") {
