@@ -9,6 +9,7 @@ export type MonitorMessages = {
   processScopeNotice: string; noMatchingProcesses: string; sortProcessesBy: string; processRowsShown: string;
   processInventoryCapped: string; processInventoryComplete: string;
   parentPid: string; threadCount: string;
+  treeView: string; listView: string; expandProcess: string; collapseProcess: string; processDetails: string; selectedProcess: string; processNoLongerSampled: string; processState: string;
   network: string; interfaceCount: string; download: string; upload: string; battery: string; charging: string; discharging: string; full: string;
   temperature: string; frequency: string; activity: string; read: string; write: string;
   recommendation: string; openSystemSettings: string; refreshInterval: string; historyWindow: string; processLimit: string;
@@ -54,6 +55,7 @@ const en: MonitorMessages = {
   noIssues: 'No issues detected', issuesDetected: '{n} issues detected', processes: 'Processes', topCpu: 'Top CPU', topMemory: 'Top memory',
   process: 'Process', processFilter: 'Filter processes', searchProcesses: 'Search name or PID', allProcesses: 'All sampled processes', highCpuProcesses: 'CPU ≥ 5%', highMemoryProcesses: 'Memory ≥ 512 MB',
   processScopeNotice: 'Search and sort a PID-ordered inventory of up to 500 processes. No process command lines or paths are collected.', noMatchingProcesses: 'No sampled process matches these filters.', sortProcessesBy: 'Sort by {column}', processRowsShown: '{count} matching processes.', processInventoryCapped: 'Showing a bounded sample of {count} from {total} detected processes.', processInventoryComplete: '{total} processes detected.', parentPid: 'Parent', threadCount: 'threads',
+  treeView: 'Tree view', listView: 'List view', expandProcess: 'Expand children of {name}', collapseProcess: 'Collapse children of {name}', processDetails: 'Process details', selectedProcess: 'Selected process', processNoLongerSampled: 'This process is no longer in the current sample.', processState: 'State',
   network: 'Network', interfaceCount: 'Interfaces: {n}', download: 'Download', upload: 'Upload', battery: 'Battery', charging: 'Charging', discharging: 'Discharging', full: 'Full',
   temperature: 'Temperature', frequency: 'Frequency', activity: 'Activity', read: 'Read', write: 'Write',
   recommendation: 'Recommendation', openSystemSettings: 'Open Storage settings', refreshInterval: 'Refresh interval', historyWindow: 'History window', processLimit: 'Process list size',
@@ -111,6 +113,7 @@ const fr: MonitorMessages = {
   noIssues: 'Aucun problème détecté', issuesDetected: '{n} problèmes détectés', processes: 'Processus', topCpu: 'Plus forte utilisation CPU', topMemory: 'Plus forte utilisation mémoire',
   process: 'Processus', processFilter: 'Filtrer les processus', searchProcesses: 'Rechercher par nom ou PID', allProcesses: 'Tous les processus échantillonnés', highCpuProcesses: 'CPU ≥ 5 %', highMemoryProcesses: 'Mémoire ≥ 512 Mo',
   processScopeNotice: 'Recherche et tri dans un inventaire ordonné par PID, limité à 500 processus. Aucune ligne de commande ni aucun chemin de processus ne sont collectés.', noMatchingProcesses: 'Aucun processus échantillonné ne correspond aux filtres.', sortProcessesBy: 'Trier par {column}', processRowsShown: '{count} processus correspondent.', processInventoryCapped: 'Échantillon limité à {count} processus sur {total} détectés.', processInventoryComplete: '{total} processus détectés.', parentPid: 'Parent', threadCount: 'threads',
+  treeView: 'Vue arborescente', listView: 'Vue en liste', expandProcess: 'Développer les enfants de {name}', collapseProcess: 'Réduire les enfants de {name}', processDetails: 'Détails du processus', selectedProcess: 'Processus sélectionné', processNoLongerSampled: 'Ce processus ne figure plus dans l’échantillon actuel.', processState: 'État',
   network: 'Réseau', interfaceCount: 'Interfaces réseau : {n}', download: 'Téléchargement', upload: 'Envoi', battery: 'Batterie', charging: 'En charge', discharging: 'En décharge', full: 'Chargée',
   temperature: 'Température', frequency: 'Fréquence', activity: 'Activité', read: 'Lecture', write: 'Écriture',
   recommendation: 'Conseil', openSystemSettings: 'Ouvrir les paramètres de stockage', refreshInterval: 'Fréquence d’actualisation', historyWindow: 'Période de l’historique', processLimit: 'Nombre de processus',

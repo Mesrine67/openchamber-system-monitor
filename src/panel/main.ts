@@ -12,6 +12,7 @@ import { startFrame, type FrameContext } from '../frame/host.ts';
 import { sparkline, sparklineFromValues, SPARKLINE_CSS } from '../frame/sparkline.ts';
 import { BASE_CSS, element, installStyle, toneFor } from '../frame/ui.ts';
 import { renderWslView } from './wsl-view.ts';
+import { flattenProcessTree, type ProcessTreeRow } from '../shared/process-tree.ts';
 import type { WslAction, WslCatalog, WslConfigDocument, WslConfigTarget, WslDiagnostics, WslJob, WslSnapshot } from '../shared/wsl.ts';
 import {
   busiestGpu, DEFAULT_MONITOR_SETTINGS, diskPercent, fullestDisk, normalizeMonitorSettings,
@@ -44,7 +45,7 @@ html,body{height:100%;min-height:100%;background:var(--oc-bg);overflow:auto}
 .chart-card{min-width:0}.chart{height:70px}.chart .spark{height:52px}.chart .caption{display:flex;justify-content:space-between}.core-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(40px,1fr));gap:5px}.core-cell{display:flex;flex-direction:column;gap:3px;min-width:0}.core-fill{height:5px;border-radius:4px;background:var(--oc-primary);transition:width 180ms ease}.core-track{height:5px;border-radius:4px;background:var(--oc-subtle)}
 .warning-list{display:flex;flex-direction:column;gap:5px}.warning-row{border-left:2px solid var(--oc-warning);padding:4px 8px;background:color-mix(in srgb,var(--oc-warning) 7%,transparent);border-radius:0 5px 5px 0}.warning-row[data-level=critical]{border-color:var(--oc-error);background:color-mix(in srgb,var(--oc-error) 7%,transparent)}.warning-row>summary{display:flex;justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer;list-style-position:inside}.warning-row>summary strong{font-size:11px}.warning-row .severity{font-size:10px;color:var(--oc-warning-text);white-space:nowrap}.warning-row[data-level=critical] .severity{color:var(--oc-error-text)}
 .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:8px}.info-block{display:flex;flex-direction:column;gap:7px}.process-table{display:flex;flex-direction:column;gap:5px}.process-row{display:grid;grid-template-columns:minmax(90px,1fr) auto 56px 64px;gap:8px;align-items:center;font-size:11px}.process-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.process-row+.process-row{border-top:1px solid var(--oc-border);padding-top:5px}.empty{padding:12px;color:var(--oc-muted);border:1px dashed var(--oc-border);border-radius:var(--oc-radius,8px)}
-.process-controls{display:grid;grid-template-columns:minmax(180px,2fr) minmax(150px,1fr);gap:8px;align-items:center}.processes-grid{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}.processes-grid th,.processes-grid td{padding:8px 10px;border-bottom:1px solid var(--oc-border);text-align:left}.processes-grid th{color:var(--oc-muted);font-weight:550}.processes-grid td.value{text-align:right;font-variant-numeric:tabular-nums}.processes-grid th:nth-child(2),.processes-grid td:nth-child(2){width:90px}.processes-grid th:nth-child(3),.processes-grid td:nth-child(3),.processes-grid th:nth-child(4),.processes-grid td:nth-child(4){width:120px}.process-sort{border:0;background:transparent;color:inherit;font:inherit;padding:2px 0;cursor:pointer}.process-sort:focus-visible{outline:2px solid var(--oc-primary);outline-offset:2px;border-radius:3px}.process-meta{display:block;color:var(--oc-muted);font-size:10px;margin-top:2px;overflow-wrap:anywhere}
+.process-controls{display:grid;grid-template-columns:minmax(180px,2fr) minmax(150px,1fr) auto;gap:8px;align-items:center}.processes-grid{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}.processes-grid th,.processes-grid td{padding:8px 10px;border-bottom:1px solid var(--oc-border);text-align:left}.processes-grid th{color:var(--oc-muted);font-weight:550}.processes-grid td.value{text-align:right;font-variant-numeric:tabular-nums}.processes-grid th:nth-child(2),.processes-grid td:nth-child(2){width:90px}.processes-grid th:nth-child(3),.processes-grid td:nth-child(3),.processes-grid th:nth-child(4),.processes-grid td:nth-child(4){width:120px}.process-sort{border:0;background:transparent;color:inherit;font:inherit;padding:2px 0;cursor:pointer}.process-sort:focus-visible{outline:2px solid var(--oc-primary);outline-offset:2px;border-radius:3px}.process-meta{display:block;color:var(--oc-muted);font-size:10px;margin-top:2px;overflow-wrap:anywhere}.process-name-cell{overflow:hidden}.process-name-control{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:0;border:0;background:transparent;color:var(--oc-fg);font:inherit;text-align:left;cursor:pointer}.process-name-control:focus-visible,.process-tree-toggle:focus-visible{outline:2px solid var(--oc-primary);outline-offset:2px;border-radius:3px}.process-tree-toggle{flex:0 0 18px;width:18px;height:18px;padding:0;border:1px solid var(--oc-border);border-radius:4px;background:var(--oc-bg);color:var(--oc-muted);font:inherit;cursor:pointer}.process-tree-spacer{flex:0 0 18px}.process-detail{margin-top:8px}.process-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:6px 14px}
 .recommendation{padding:9px 10px;border:1px solid var(--oc-border);border-radius:var(--oc-radius,8px);display:flex;flex-direction:column;gap:6px}.recommendation strong{font-size:12px}.settings-group{display:flex;flex-direction:column;gap:9px}.select-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,225px),1fr));gap:10px}.select-field{display:flex;flex-direction:column;gap:5px;min-width:0}.switch-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:8px}.settings-note{border-left:2px solid var(--oc-info);padding:7px 9px;color:var(--oc-muted);font-size:11px;background:color-mix(in srgb,var(--oc-info) 5%,transparent)}
 .loading{min-height:140px;display:grid;place-items:center}.header [data-tone=success]{color:var(--oc-success-text)}
 .wsl-view{gap:10px}.wsl-section-head,.wsl-summary,.wsl-distro-header,.wsl-actions,.wsl-confirm-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.wsl-section-head{justify-content:space-between}.wsl-summary{justify-content:space-between;padding:8px 10px;border:1px solid var(--oc-border);border-radius:var(--oc-radius,8px)}.wsl-list{display:flex;flex-direction:column;gap:8px}.wsl-distro{gap:8px}.wsl-distro-header .card-title{min-width:0;overflow-wrap:anywhere}.wsl-default-label{font-size:10px;color:var(--oc-primary-text)}.wsl-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:5px 10px}.wsl-detail-heading{grid-column:1/-1;margin:4px 0 0}.wsl-actions{padding-top:3px;border-top:1px solid var(--oc-border)}.wsl-action{display:inline-flex}.wsl-status{border-left:2px solid var(--oc-info);padding:7px 9px;color:var(--oc-info-text);background:color-mix(in srgb,var(--oc-info) 6%,transparent);font-size:11px}.wsl-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));align-items:end;gap:8px}.wsl-fields>.wsl-action{align-self:end}.wsl-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,155px),1fr));gap:8px;align-items:end}.wsl-config-card{gap:10px}.wsl-config-field{min-width:0}.wsl-config-field textarea.oc-sdk-input{min-height:280px;resize:vertical;tab-size:2}.wsl-config-warning{border-left:2px solid var(--oc-warning);padding:7px 9px;color:var(--oc-warning-text);background:color-mix(in srgb,var(--oc-warning) 7%,transparent);font-size:11px}.wsl-confirm{color:var(--oc-fg);background:var(--oc-bg);border:1px solid var(--oc-border);border-radius:var(--oc-radius,8px);padding:16px;max-width:min(480px,calc(100vw - 32px));box-shadow:0 18px 50px #0005}.wsl-confirm::backdrop{background:#0008}.wsl-confirm-form{display:flex;flex-direction:column;gap:10px}.wsl-confirm-actions{justify-content:flex-end}
@@ -67,6 +68,9 @@ let processQuery = '';
 let processFilter: ProcessFilter = 'all';
 let processSort: ProcessSort = 'cpu';
 let processSortDirection: SortDirection = 'descending';
+let processTreeMode = false;
+let selectedProcessPid: number | null = null;
+const collapsedProcessPids = new Set<number>();
 let lastLocale = '';
 let lastSurface = '';
 let loadingSettings = false;
@@ -341,7 +345,9 @@ const renderProcesses = (stats: Stats, tm: MonitorMessages, t: Messages, locale:
       if (id === 'all' || id === 'cpu' || id === 'memory') { processFilter = id; renderActive(); }
     },
   });
-  controls.append(searchSlot, filterSlot);
+  const treeToggle = element('div');
+  mountButton(treeToggle, { label: processTreeMode ? tm.listView : tm.treeView, size: 'xs', variant: processTreeMode ? 'secondary' : 'outline', onClick: () => { processTreeMode = !processTreeMode; renderActive(); } });
+  controls.append(searchSlot, filterSlot, treeToggle);
   card.append(controls);
 
   const query = processQuery.trim().toLocaleLowerCase(locale);
@@ -354,13 +360,17 @@ const renderProcesses = (stats: Stats, tm: MonitorMessages, t: Messages, locale:
       || (processFilter === 'memory' && item.memoryBytes !== null && item.memoryBytes >= memoryThreshold);
     return matchesQuery && matchesFilter;
   });
-  rows.sort((a, b) => {
+  const compareProcesses = (a: ProcessEntry, b: ProcessEntry): number => {
     const comparison = processSort === 'name' ? a.name.localeCompare(b.name, locale)
       : processSort === 'pid' ? a.pid - b.pid
         : processSort === 'cpu' ? (a.cpuPercent ?? -1) - (b.cpuPercent ?? -1)
           : (a.memoryBytes ?? -1) - (b.memoryBytes ?? -1);
     return processSortDirection === 'ascending' ? comparison : -comparison;
-  });
+  };
+  rows.sort(compareProcesses);
+  const visibleRows: ProcessTreeRow[] = processTreeMode
+    ? flattenProcessTree(rows, collapsedProcessPids, compareProcesses)
+    : rows.map((item) => ({ item, depth: 0, hasChildren: false, collapsed: false }));
 
   const table = element('table', 'processes-grid');
   table.setAttribute('aria-label', tm.processes);
@@ -392,10 +402,33 @@ const renderProcesses = (stats: Stats, tm: MonitorMessages, t: Messages, locale:
   thead.append(headings);
   table.append(thead);
   const tbody = element('tbody');
-  rows.forEach((item) => {
+  visibleRows.forEach(({ item, depth, hasChildren, collapsed }) => {
     const tr = element('tr');
+    const nameCell = element('td', 'process-name-cell');
+    nameCell.style.paddingInlineStart = `${10 + depth * 16}px`;
+    if (processTreeMode && hasChildren) {
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'process-tree-toggle';
+      toggle.textContent = collapsed ? '+' : '−';
+      toggle.setAttribute('aria-label', format(collapsed ? tm.expandProcess : tm.collapseProcess, { name: item.name }));
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+      toggle.addEventListener('click', () => {
+        if (collapsedProcessPids.has(item.pid)) collapsedProcessPids.delete(item.pid);
+        else collapsedProcessPids.add(item.pid);
+        renderActive();
+      });
+      nameCell.append(toggle);
+    } else if (processTreeMode) nameCell.append(element('span', 'process-tree-spacer'));
+    const nameButton = document.createElement('button');
+    nameButton.type = 'button';
+    nameButton.className = 'process-name-control';
+    nameButton.textContent = item.name;
+    nameButton.setAttribute('aria-pressed', String(selectedProcessPid === item.pid));
+    nameButton.addEventListener('click', () => { selectedProcessPid = item.pid; renderActive(); });
+    nameCell.append(nameButton);
     tr.append(
-      element('td', 'process-name', item.name),
+      nameCell,
       (() => {
         const cell = element('td', 'muted', String(item.pid));
         const details = [
@@ -413,6 +446,23 @@ const renderProcesses = (stats: Stats, tm: MonitorMessages, t: Messages, locale:
   table.append(tbody);
   if (rows.length === 0) card.append(element('div', 'empty', tm.noMatchingProcesses));
   else card.append(table);
+  const selectedProcess = selectedProcessPid === null ? null : byPid.get(selectedProcessPid) ?? null;
+  if (selectedProcessPid !== null) {
+    const details = element('section', 'card process-detail');
+    details.setAttribute('aria-label', tm.processDetails);
+    details.append(element('div', 'card-title', selectedProcess ? `${tm.selectedProcess}: ${selectedProcess.name}` : tm.processNoLongerSampled));
+    if (selectedProcess) {
+      const detailGrid = element('div', 'process-detail-grid');
+      row(detailGrid, tm.pid, String(selectedProcess.pid));
+      row(detailGrid, tm.parentPid, selectedProcess.parentPid === undefined || selectedProcess.parentPid === null ? t.notAvailable : String(selectedProcess.parentPid));
+      row(detailGrid, tm.threadCount, selectedProcess.threadCount === undefined || selectedProcess.threadCount === null ? t.notAvailable : String(selectedProcess.threadCount));
+      row(detailGrid, tm.processState, selectedProcess.state ?? t.notAvailable);
+      row(detailGrid, tm.cpu, selectedProcess.cpuPercent === null ? t.notAvailable : formatPercent(selectedProcess.cpuPercent, locale));
+      row(detailGrid, tm.memory, selectedProcess.memoryBytes === null ? t.notAvailable : formatBytes(selectedProcess.memoryBytes, locale));
+      details.append(detailGrid);
+    }
+    card.append(details);
+  }
   const inventoryTotal = stats.processes.totalProcesses ?? byPid.size;
   const inventoryNote = stats.processes.inventoryTruncated
     ? ` ${tm.processInventoryCapped.replace('{count}', String(byPid.size)).replace('{total}', String(inventoryTotal))}`
