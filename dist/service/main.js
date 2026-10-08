@@ -2413,22 +2413,39 @@ var parseWslDiagnostics = (input) => {
     const end = content.search(/\n__/);
     return (end < 0 ? content : content.slice(0, end)).trim();
   };
-  const processesText = section("PROCESSES");
-  const processes = processesText === null || processesText === "__UNAVAILABLE__" ? { status: "unavailable", reason: processesText === null ? "Process data was not returned." : "The ps utility is not available in this distribution.", items: [] } : {
-    status: "ok",
-    items: processesText.split(`
-`).flatMap((line) => {
-      const match = line.trim().match(/^(\d+)\s+(\S+)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/);
-      if (!match)
-        return [];
-      const pid = Number(match[1]);
-      const cpuPercent = Number(match[3]);
-      const memoryPercent = Number(match[4]);
-      if (!Number.isSafeInteger(pid) || pid < 1 || !Number.isFinite(cpuPercent) || !Number.isFinite(memoryPercent))
-        return [];
-      return [{ pid, name: match[2].slice(0, 64), cpuPercent, memoryPercent }];
-    }).slice(0, 10)
-  };
+  const legacyProcesses = section("PROCESSES");
+  const cpuProcesses = section("PROCESSES_CPU");
+  const memoryProcesses = section("PROCESSES_MEMORY");
+  const processSources = cpuProcesses !== null || memoryProcesses !== null ? [cpuProcesses, memoryProcesses] : [legacyProcesses];
+  const processUnavailable = processSources.some((source) => source === "__UNAVAILABLE__");
+  const processes = processSources.every((source) => source === null) || processUnavailable ? {
+    status: "unavailable",
+    reason: processUnavailable ? "The ps utility is not available in this distribution." : "Process data was not returned.",
+    items: []
+  } : (() => {
+    const items = new Map;
+    for (let sourceIndex = 0;sourceIndex < processSources.length; sourceIndex += 1) {
+      const source = processSources[sourceIndex];
+      if (source == null)
+        continue;
+      for (const line of source.split(`
+`)) {
+        const value = line.trim();
+        const modern = sourceIndex < 2 && (cpuProcesses !== null || memoryProcesses !== null);
+        const match = modern ? /^(\d+)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(.+?)\s*$/.exec(value) : /^(\d+)\s+(\S+)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/.exec(value);
+        if (!match)
+          continue;
+        const pid = Number(match[1]);
+        const cpuPercent = Number(modern ? match[2] : match[3]);
+        const memoryPercent = Number(modern ? match[3] : match[4]);
+        const name = (modern ? match[4] : match[2])?.trim();
+        if (!Number.isSafeInteger(pid) || pid < 1 || !Number.isFinite(cpuPercent) || cpuPercent < 0 || !Number.isFinite(memoryPercent) || memoryPercent < 0 || !name)
+          continue;
+        items.set(pid, { pid, name: name.slice(0, 64), cpuPercent, memoryPercent });
+      }
+    }
+    return { status: "ok", items: [...items.values()].slice(0, cpuProcesses !== null || memoryProcesses !== null ? 200 : 10) };
+  })();
   const portsText = section("PORTS");
   const listeningPorts = portsText === null || portsText === "__UNAVAILABLE__" ? { status: "unavailable", reason: portsText === null ? "Network data was not returned." : "The ss utility is not available in this distribution.", items: [] } : {
     status: "ok",
@@ -2825,7 +2842,7 @@ var readWslDiagnostics = async (name) => {
     throw new Error("Sélectionne une distribution WSL 2 en cours d’exécution.");
   }
   const probe = [
-    `printf "__PROCESSES__\\n"; if command -v ps >/dev/null 2>&1; then ps -eo pid=,comm=,%cpu=,%mem= 2>/dev/null | awk '$2 != "sh" && $2 != "ps" && $2 != "awk" && $2 != "sort" && $2 != "head"' | sort -k3,3nr | head -n 10; else printf "__UNAVAILABLE__\\n"; fi`,
+    `if command -v ps >/dev/null 2>&1; then process_rows="$(ps -eo pid=,%cpu=,%mem=,comm= -ww 2>/dev/null | awk '$(NF) != "sh" && $(NF) != "ps" && $(NF) != "awk" && $(NF) != "sort" && $(NF) != "head"')"; printf "__PROCESSES_CPU__\\n"; printf "%s\\n" "$process_rows" | sort -k2,2nr | head -n 100; printf "__PROCESSES_MEMORY__\\n"; printf "%s\\n" "$process_rows" | sort -k3,3nr | head -n 100; else printf "__PROCESSES_CPU__\\n__UNAVAILABLE__\\n__PROCESSES_MEMORY__\\n__UNAVAILABLE__\\n"; fi`,
     `printf "__PORTS__\\n"; if command -v ss >/dev/null 2>&1; then ss -H -lntu 2>/dev/null | awk '{print $1 " " $5}' | head -n 100; else printf "__UNAVAILABLE__\\n"; fi`,
     `printf "__NETWORK__\\n"; if command -v ip >/dev/null 2>&1; then printf "ADDRESSES="; hostname -I 2>/dev/null || true; printf "\\nGATEWAY="; ip -4 route show default 2>/dev/null | awk 'NR == 1 {for (i=1;i<NF;i++) if ($i == "via") {print $(i+1); exit}}'; printf "DNS="; awk '$1 == "nameserver" {print $2}' /etc/resolv.conf 2>/dev/null | head -n 8 | tr "\\n" " "; else printf "__UNAVAILABLE__\\n"; fi`
   ].join("; ");

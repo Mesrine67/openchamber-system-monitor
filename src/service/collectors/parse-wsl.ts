@@ -10,7 +10,7 @@ export type WslDiagnosticSections = {
 /** Parses bounded output from the fixed, read-only WSL diagnostics probe. */
 export const parseWslDiagnostics = (input: string | Uint8Array): WslDiagnosticSections => {
   const text = decodeWslText(input);
-  const section = (name: 'PROCESSES' | 'PORTS' | 'NETWORK'): string | null => {
+  const section = (name: 'PROCESSES' | 'PROCESSES_CPU' | 'PROCESSES_MEMORY' | 'PORTS' | 'NETWORK'): string | null => {
     const marker = `__${name}__\n`;
     const start = text.indexOf(marker);
     if (start < 0) return null;
@@ -18,21 +18,42 @@ export const parseWslDiagnostics = (input: string | Uint8Array): WslDiagnosticSe
     const end = content.search(/\n__/);
     return (end < 0 ? content : content.slice(0, end)).trim();
   };
-  const processesText = section('PROCESSES');
-  const processes = (processesText === null || processesText === '__UNAVAILABLE__'
-    ? { status: 'unavailable', reason: processesText === null ? 'Process data was not returned.' : 'The ps utility is not available in this distribution.', items: [] }
-    : {
-      status: 'ok',
-      items: processesText.split('\n').flatMap((line) => {
-        const match = line.trim().match(/^(\d+)\s+(\S+)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/);
-        if (!match) return [];
-        const pid = Number(match[1]);
-        const cpuPercent = Number(match[3]);
-        const memoryPercent = Number(match[4]);
-        if (!Number.isSafeInteger(pid) || pid < 1 || !Number.isFinite(cpuPercent) || !Number.isFinite(memoryPercent)) return [];
-        return [{ pid, name: match[2]!.slice(0, 64), cpuPercent, memoryPercent }];
-      }).slice(0, 10),
-    }) as WslReadings<WslProcess>;
+  const legacyProcesses = section('PROCESSES');
+  const cpuProcesses = section('PROCESSES_CPU');
+  const memoryProcesses = section('PROCESSES_MEMORY');
+  const processSources = cpuProcesses !== null || memoryProcesses !== null
+    ? [cpuProcesses, memoryProcesses] as const
+    : [legacyProcesses] as const;
+  const processUnavailable = processSources.some((source) => source === '__UNAVAILABLE__');
+  const processes = processSources.every((source) => source === null) || processUnavailable
+    ? {
+      status: 'unavailable' as const,
+      reason: processUnavailable ? 'The ps utility is not available in this distribution.' : 'Process data was not returned.',
+      items: [] as [],
+    }
+    : (() => {
+      const items = new Map<number, WslProcess>();
+      for (let sourceIndex = 0; sourceIndex < processSources.length; sourceIndex += 1) {
+        const source = processSources[sourceIndex];
+        if (source == null) continue;
+        for (const line of source.split('\n')) {
+          const value = line.trim();
+          const modern = sourceIndex < 2 && (cpuProcesses !== null || memoryProcesses !== null);
+          const match = modern
+            ? /^(\d+)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(.+?)\s*$/.exec(value)
+            : /^(\d+)\s+(\S+)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/.exec(value);
+          if (!match) continue;
+          const pid = Number(match[1]);
+          const cpuPercent = Number(modern ? match[2] : match[3]);
+          const memoryPercent = Number(modern ? match[3] : match[4]);
+          const name = (modern ? match[4] : match[2])?.trim();
+          if (!Number.isSafeInteger(pid) || pid < 1 || !Number.isFinite(cpuPercent) || cpuPercent < 0
+            || !Number.isFinite(memoryPercent) || memoryPercent < 0 || !name) continue;
+          items.set(pid, { pid, name: name.slice(0, 64), cpuPercent, memoryPercent });
+        }
+      }
+      return { status: 'ok' as const, items: [...items.values()].slice(0, cpuProcesses !== null || memoryProcesses !== null ? 200 : 10) };
+    })();
 
   const portsText = section('PORTS');
   const listeningPorts = (portsText === null || portsText === '__UNAVAILABLE__'

@@ -46,6 +46,7 @@ export type MonitorMessages = {
   cloneDistro: string; renameDistro: string; cloneName: string; cloneLocation: string; cloneWarning: string; renameWarning: string; defaultDistro: string; cpuPerDistroUnavailable: string;
   wslDiagnostics: string; pid: string; cpu: string; memory: string; protocol: string; address: string; port: string; noListeningPorts: string; diagnosticsUnavailable: string;
   wslAddresses: string; wslGateway: string; wslDnsServers: string; wslConfiguredMode: string; wslNetworkUnavailable: string;
+  searchWslProcesses: string; sortWslProcesses: string; sortWslByCpu: string; sortWslByMemory: string; noWslProcessMatches: string; wslProcessSample: string;
 };
 
 const en: MonitorMessages = {
@@ -104,6 +105,7 @@ const en: MonitorMessages = {
   defaultDistro: 'Default distribution', cpuPerDistroUnavailable: 'WSL does not expose reliable CPU usage per distribution.',
   wslDiagnostics: 'Processes and listening ports', pid: 'PID', cpu: 'CPU', memory: 'Memory', protocol: 'Protocol', address: 'Address', port: 'Port', noListeningPorts: 'No listening ports detected.', diagnosticsUnavailable: 'Diagnostics unavailable.',
   wslAddresses: 'Distribution addresses', wslGateway: 'Default gateway', wslDnsServers: 'DNS servers', wslConfiguredMode: 'Configured network mode', wslNetworkUnavailable: 'Guest network details are unavailable; required Linux tools may be missing.',
+  searchWslProcesses: 'Search process name or PID', sortWslProcesses: 'Sort processes', sortWslByCpu: 'CPU usage', sortWslByMemory: 'Memory usage', noWslProcessMatches: 'No WSL process matches this search.', wslProcessSample: 'Sample combines up to 100 processes ranked by CPU and 100 ranked by memory. CPU is guest process usage; distribution-level CPU is not exposed reliably.',
 };
 
 const fr: MonitorMessages = {
@@ -162,6 +164,7 @@ const fr: MonitorMessages = {
   defaultDistro: 'Distribution par défaut', cpuPerDistroUnavailable: 'WSL ne fournit pas de mesure CPU fiable pour chaque distribution.',
   wslDiagnostics: 'Processus et ports en écoute', pid: 'PID', cpu: 'CPU', memory: 'Mémoire', protocol: 'Protocole', address: 'Adresse', port: 'Port', noListeningPorts: 'Aucun port en écoute détecté.', diagnosticsUnavailable: 'Diagnostic indisponible.',
   wslAddresses: 'Adresses de la distribution', wslGateway: 'Passerelle par défaut', wslDnsServers: 'Serveurs DNS', wslConfiguredMode: 'Mode réseau configuré', wslNetworkUnavailable: 'Les informations réseau de l’invité sont indisponibles ; des outils Linux requis sont peut-être absents.',
+  searchWslProcesses: 'Rechercher un processus ou un PID', sortWslProcesses: 'Trier les processus', sortWslByCpu: 'Utilisation CPU', sortWslByMemory: 'Utilisation mémoire', noWslProcessMatches: 'Aucun processus WSL ne correspond à cette recherche.', wslProcessSample: 'Échantillon combinant jusqu’à 100 processus classés par CPU et 100 par mémoire. Le CPU est mesuré dans l’invité ; la consommation CPU par distribution reste indisponible de façon fiable.',
 };
 
 const partial: Partial<Record<string, Partial<MonitorMessages>>> = {

@@ -1,6 +1,10 @@
-__PROCESSES__
-1842 node 12.5 4.8
-2010 python3 2.0 1.1
+__PROCESSES_CPU__
+1842 12.5 4.8 node
+2010 2.0 1.1 python3
+__PROCESSES_MEMORY__
+1842 12.5 4.8 node
+2010 2.0 1.1 python3
+3011 1.5 3.8 background worker
 __PORTS__
 tcp 127.0.0.1:3000
 tcp [::]:22

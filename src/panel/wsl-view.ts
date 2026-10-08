@@ -13,6 +13,8 @@ let distroSearch = '';
 let distroStateFilter = 'all';
 let distroVersionFilter = 'all';
 let distroSourceFilter = 'all';
+let wslProcessSearch = '';
+let wslProcessSort: 'cpu' | 'memory' = 'cpu';
 
 export type WslPanelOptions = {
   snapshot: WslSnapshot | null;
@@ -200,10 +202,55 @@ const distroCard = (options: WslPanelOptions, distro: WslDistribution): HTMLElem
       diagnosticsView.append(element('h4', 'card-title wsl-detail-heading', options.tm.processes));
       if (diagnostics.processes.status === 'unavailable') diagnosticsView.append(element('div', 'caption', diagnostics.processes.reason));
       else if (diagnostics.processes.items.length === 0) diagnosticsView.append(element('div', 'caption', options.tm.noProcesses));
-      else for (const process of diagnostics.processes.items) {
-        const line = element('div', 'row');
-        line.append(element('span', 'value', process.name), element('span', 'muted', `${options.tm.pid} ${process.pid} · ${options.tm.cpu} ${process.cpuPercent?.toFixed(1) ?? '—'}% · ${options.tm.memory} ${process.memoryPercent?.toFixed(1) ?? '—'}%`));
-        diagnosticsView.append(line);
+      else {
+        diagnosticsView.append(element('div', 'caption', options.tm.wslProcessSample));
+        const processControls = element('div', 'wsl-process-controls');
+        const searchSlot = element('div');
+        const applyProcessView = (): void => {
+          const query = wslProcessSearch.trim().toLocaleLowerCase(options.locale);
+          const sorted = [...diagnostics.processes.items].sort((left, right) => {
+            const primary = wslProcessSort === 'cpu' ? left.cpuPercent : left.memoryPercent;
+            const secondary = wslProcessSort === 'cpu' ? right.cpuPercent : right.memoryPercent;
+            return (secondary ?? -1) - (primary ?? -1);
+          });
+          processRows.replaceChildren();
+          let visible = 0;
+          for (const process of sorted) {
+            if (query && !process.name.toLocaleLowerCase(options.locale).includes(query) && !String(process.pid).includes(query)) continue;
+            const line = element('div', 'wsl-process-row');
+            line.append(
+              element('span', 'value', process.name),
+              element('span', 'muted', `${options.tm.pid} ${process.pid}`),
+              element('span', 'value', `${options.tm.cpu} ${process.cpuPercent?.toLocaleString(options.locale, { maximumFractionDigits: 1 }) ?? '—'}%`),
+              element('span', 'value', `${options.tm.memory} ${process.memoryPercent?.toLocaleString(options.locale, { maximumFractionDigits: 1 }) ?? '—'}%`),
+            );
+            processRows.append(line);
+            visible += 1;
+          }
+          noProcessMatch.hidden = visible > 0;
+        };
+        mountTextField(searchSlot, {
+          label: options.tm.searchWslProcesses,
+          value: wslProcessSearch,
+          onChange: (value) => { wslProcessSearch = value; applyProcessView(); },
+        });
+        const sortSlot = element('div');
+        mountSelect(sortSlot, {
+          label: options.tm.sortWslProcesses,
+          value: wslProcessSort,
+          options: [
+            { id: 'cpu', label: options.tm.sortWslByCpu },
+            { id: 'memory', label: options.tm.sortWslByMemory },
+          ],
+          onChange: (value) => { if (value === 'cpu' || value === 'memory') { wslProcessSort = value; applyProcessView(); } },
+        });
+        processControls.append(searchSlot, sortSlot);
+        diagnosticsView.append(processControls);
+        const processRows = element('div', 'wsl-process-list');
+        const noProcessMatch = element('div', 'caption', options.tm.noWslProcessMatches);
+        noProcessMatch.hidden = true;
+        diagnosticsView.append(processRows, noProcessMatch);
+        applyProcessView();
       }
       diagnosticsView.append(element('h4', 'card-title wsl-detail-heading', options.tm.network));
       if (diagnostics.network.status === 'unavailable') diagnosticsView.append(element('div', 'caption', options.tm.wslNetworkUnavailable));

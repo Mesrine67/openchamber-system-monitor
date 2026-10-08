@@ -35,6 +35,7 @@ describe('WSL parser', () => {
       processes: { status: 'ok', items: [
         { pid: 1842, name: 'node', cpuPercent: 12.5, memoryPercent: 4.8 },
         { pid: 2010, name: 'python3', cpuPercent: 2, memoryPercent: 1.1 },
+        { pid: 3011, name: 'background worker', cpuPercent: 1.5, memoryPercent: 3.8 },
       ] },
       listeningPorts: { status: 'ok', items: [
         { protocol: 'tcp', address: '127.0.0.1', port: 3000 },
@@ -46,6 +47,19 @@ describe('WSL parser', () => {
         dnsServers: ['10.255.255.254', '2001:db8::53'], configuredMode: null,
       },
     });
+  });
+
+  test('merges CPU and memory leaderboards by PID and caps the process snapshot', () => {
+    const cpu = Array.from({ length: 130 }, (_, index) => `${index + 1} ${130 - index} 1 worker ${index}`).join('\n');
+    const memory = Array.from({ length: 130 }, (_, index) => `${index + 101} 1 ${130 - index} worker ${index + 100}`).join('\n');
+    const parsed = parseWslDiagnostics(`__PROCESSES_CPU__\n${cpu}\n__PROCESSES_MEMORY__\n${memory}\n__PORTS__\n__NETWORK__`);
+    expect(parsed.processes.status).toBe('ok');
+    if (parsed.processes.status !== 'ok') return;
+    expect(parsed.processes.items).toHaveLength(200);
+    expect(parsed.processes.items[0]).toEqual({ pid: 1, name: 'worker 0', cpuPercent: 130, memoryPercent: 1 });
+    expect(parsed.processes.items.find(({ pid }) => pid === 101)).toEqual({ pid: 101, name: 'worker 100', cpuPercent: 1, memoryPercent: 130 });
+    expect(parsed.processes.items.at(-1)).toEqual({ pid: 200, name: 'worker 199', cpuPercent: 1, memoryPercent: 31 });
+    expect(new Set(parsed.processes.items.map(({ pid }) => pid)).size).toBe(200);
   });
 
   test('keeps missing guest tools unavailable and drops malformed readings', () => {
