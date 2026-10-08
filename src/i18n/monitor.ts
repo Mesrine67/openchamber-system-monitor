@@ -38,6 +38,7 @@ export type MonitorMessages = {
   noCatalogItems: string; loadCatalog: string;
   defaultUserWarning: string;
   globalConfig: string; distributionConfig: string; editConfig: string; saveConfig: string; configNotice: string; configSaved: string;
+  pendingRestartTitle: string; pendingRestartGlobal: string; pendingRestartDistribution: string; pendingRestartStorageError: string;
   configSummary: string; configBootCommandWarning: string; configNetworkingDisabledWarning: string;
   runningCount: string; defaultWslVersion: string; setDefaultWslVersion: string; updateWsl: string; updateWslWarning: string; defaultVersionWarning: string;
   searchDistributions: string; stateFilter: string; versionFilter: string; allDistributions: string; runningFilter: string; stoppedFilter: string; noFilteredDistributions: string;
@@ -99,6 +100,7 @@ const en: MonitorMessages = {
   globalConfig: 'Global WSL settings', distributionConfig: '{distro} settings', editConfig: 'Edit configuration', saveConfig: 'Save configuration',
   configNotice: 'Configuration can affect startup, networking, file access, or root-run boot commands. Save only settings you understand. Changes may require a full WSL shutdown.',
   configSaved: 'WSL configuration saved. Restart WSL or the affected distribution to apply it.',
+  pendingRestartTitle: 'Changes waiting for restart', pendingRestartGlobal: 'Global settings need a full WSL shutdown to take effect.', pendingRestartDistribution: '{distro} settings will apply the next time this distribution starts.', pendingRestartStorageError: 'Could not persist the pending WSL restart notice.',
   configSummary: 'Detected settings', configBootCommandWarning: 'This configuration runs a command as root when the distribution starts. Review it before saving.',
   configNetworkingDisabledWarning: 'Networking is explicitly disabled for the WSL 2 virtual machine.',
   runningCount: '{running} running of {total} distributions', defaultWslVersion: 'Default WSL version', setDefaultWslVersion: 'Set default version to WSL {version}',
@@ -164,6 +166,7 @@ const fr: MonitorMessages = {
   globalConfig: 'Réglages globaux WSL', distributionConfig: 'Réglages de {distro}', editConfig: 'Modifier la configuration', saveConfig: 'Enregistrer la configuration',
   configNotice: 'La configuration peut modifier le démarrage, le réseau, l’accès aux fichiers ou exécuter des commandes en root au lancement. N’enregistre que des réglages que tu comprends. Un arrêt complet de WSL peut être nécessaire pour appliquer les changements.',
   configSaved: 'Configuration WSL enregistrée. Redémarre WSL ou la distribution concernée pour appliquer les changements.',
+  pendingRestartTitle: 'Modifications en attente de redémarrage', pendingRestartGlobal: 'Les réglages globaux seront appliqués après un arrêt complet de WSL.', pendingRestartDistribution: 'Les réglages de {distro} seront appliqués à son prochain démarrage.', pendingRestartStorageError: 'Impossible d’enregistrer l’avis de redémarrage WSL en attente.',
   configSummary: 'Réglages détectés', configBootCommandWarning: 'Cette configuration exécute une commande en tant que root au démarrage de la distribution. Vérifie-la avant l’enregistrement.',
   configNetworkingDisabledWarning: 'Le réseau est explicitement désactivé pour la machine virtuelle WSL 2.',
   runningCount: '{running} en cours sur {total} distributions', defaultWslVersion: 'Version WSL par défaut', setDefaultWslVersion: 'Définir la version par défaut sur WSL {version}',

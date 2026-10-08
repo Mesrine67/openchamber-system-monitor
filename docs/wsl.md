@@ -13,6 +13,7 @@ System Monitor adds an optional WSL manager for Windows-hosted OpenChamber. It f
 | Distribution lifecycle | Start, stop, restart, set default, switch WSL 1/2 with a backup warning and typed confirmation, and open Terminal, Explorer, VS Code or detected xrdp. |
 | Install and backup | Install a selected entry from Microsoft's own online WSL catalog; import and export TAR archives; clone or rename through an export/import staging archive, checking destination paths and preserving recovery archives on failed imports. |
 | Configuration | Read and edit `%UserProfile%\\.wslconfig` and a distribution's `/etc/wsl.conf`. Save requires typing the exact confirmation phrase and a notice describing the impact of WSL settings. Set default Linux user validates the account and updates only the `[user]` section. |
+| Apply configuration | Saved global and per-distribution configuration targets remain visible as pending until a successful full WSL shutdown or a successful start/restart of the affected distribution. This state is stored through the OpenChamber extension storage API and contains only the target kind and distro name. |
 | Disk management | Move, resize, sparse mode and compact operations are available as fixed WSL CLI actions. Long-running or disruptive actions require typed confirmation. They run with OpenChamber's current privileges and may be unavailable when that process is not elevated. |
 
 WSL calls start only when the user opens this tab. The view polls at a 30-second interval while visible. WSL 1 and stopped distributions are not launched to gather Linux guest readings. Registration metadata is cached for five minutes; live guest details for twenty seconds. At most three running distributions are probed concurrently.
@@ -29,7 +30,7 @@ This is not 100% feature parity with [WSL UI](https://github.com/octasoft-ltd/ws
 - a system tray, startup behavior or independent application settings;
 - WSL UI's private theme editor or language selector (the OpenChamber theme/locale is authoritative);
 - detailed distro installation paths/creation dates or reliable CPU-by-distro usage;
-- WSL UI's native semantic configuration editors, pending-restart comparison and mounted-disk status panel.
+- WSL UI's native semantic configuration editor and mounted-disk status panel.
 
 These omissions avoid arbitrary code installation/execution, admin elevation, duplicated host preferences and invented metrics. WSL 2-only virtual disk operations are hidden for WSL 1 distributions. The extension shows unavailable readings as unavailable rather than fabricating a value.
 

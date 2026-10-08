@@ -98,6 +98,31 @@ export type WslConfigDocument = { target: WslConfigTarget; exists: boolean; text
 export type WslConfigUpdate = WslConfigTarget & { text: string; confirmation: string };
 export type WslConfigInsight = { section: string; key: string; value: string };
 
+/** Parse the small, non-sensitive list of configuration targets awaiting a WSL restart. */
+export const normalizeWslPendingRestarts = (value: unknown): WslConfigTarget[] => {
+  if (!Array.isArray(value)) return [];
+  const targets: WslConfigTarget[] = [];
+  for (const item of value) {
+    if (!record(item)) continue;
+    const target = item.kind === 'global' ? { kind: 'global' as const }
+      : item.kind === 'distribution' && safeDistroName(item.distro) ? { kind: 'distribution' as const, distro: item.distro }
+        : null;
+    if (target && !targets.some((current) => current.kind === target.kind
+      && (current.kind === 'global' || (target.kind === 'distribution' && current.distro.toLocaleLowerCase() === target.distro.toLocaleLowerCase())))) {
+      targets.push(target);
+    }
+  }
+  return targets;
+};
+
+export const addWslPendingRestart = (targets: WslConfigTarget[], target: WslConfigTarget): WslConfigTarget[] =>
+  normalizeWslPendingRestarts([...targets, target]);
+
+export const clearWslPendingRestart = (targets: WslConfigTarget[], target?: WslConfigTarget): WslConfigTarget[] =>
+  target === undefined ? [] : targets.filter((current) => current.kind !== target.kind
+    || (current.kind === 'distribution' && target.kind === 'distribution'
+      && current.distro.toLocaleLowerCase() !== target.distro.toLocaleLowerCase()));
+
 /** Read-only summary of settings worth surfacing; unknown keys remain untouched in the editor. */
 export const inspectWslConfig = (text: string): { insights: WslConfigInsight[]; hasBootCommand: boolean; networkingDisabled: boolean } => {
   let section = '';

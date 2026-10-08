@@ -2,9 +2,23 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { parseWslCatalog, parseWslDefaultVersion, parseWslDiagnostics, parseWslDistroDetails, parseWslList, parseWslRegistrationMetadata, parseWslVersions } from '../src/service/collectors/parse-wsl.ts';
 import { withDefaultWslUser } from '../src/service/collectors/parse-wsl-conf.ts';
-import { inspectWslConfig, parseWslAction, parseWslConfigUpdate } from '../src/shared/wsl.ts';
+import { addWslPendingRestart, clearWslPendingRestart, inspectWslConfig, normalizeWslPendingRestarts, parseWslAction, parseWslConfigUpdate } from '../src/shared/wsl.ts';
 
 describe('WSL parser', () => {
+  test('validates, deduplicates and clears persisted pending restart targets', () => {
+    const targets = normalizeWslPendingRestarts([
+      { kind: 'global' }, { kind: 'global' },
+      { kind: 'distribution', distro: 'Ubuntu' }, { kind: 'distribution', distro: 'ubuntu' },
+      { kind: 'distribution', distro: '../unsafe' }, null,
+    ]);
+    expect(targets).toEqual([{ kind: 'global' }, { kind: 'distribution', distro: 'Ubuntu' }]);
+    expect(addWslPendingRestart(targets, { kind: 'distribution', distro: 'Fedora' })).toEqual([
+      { kind: 'global' }, { kind: 'distribution', distro: 'Ubuntu' }, { kind: 'distribution', distro: 'Fedora' },
+    ]);
+    expect(clearWslPendingRestart(targets, { kind: 'distribution', distro: 'ubuntu' })).toEqual([{ kind: 'global' }]);
+    expect(clearWslPendingRestart(targets)).toEqual([]);
+  });
+
   test('summarizes known WSL settings without losing unknown settings and flags risky behavior', () => {
     const result = inspectWslConfig('[wsl2]\r\nmemory=8GB\r\nprocessors = 6\r\nnetworkingMode=none\r\ncustomFutureOption=value\r\n[boot]\r\nsystemd=true\r\ncommand=service docker start\r\n');
     expect(result.insights).toEqual([

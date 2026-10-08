@@ -15,13 +15,14 @@ import { BASE_CSS, element, installStyle, toneFor } from '../frame/ui.ts';
 import { renderWslView } from './wsl-view.ts';
 import { flattenProcessTree, type ProcessTreeRow } from '../shared/process-tree.ts';
 import { filterSessions, sessionState, type SessionFilter, type SessionState } from '../shared/openchamber-activity.ts';
-import type { WslAction, WslCatalog, WslConfigDocument, WslConfigTarget, WslDiagnostics, WslJob, WslSnapshot } from '../shared/wsl.ts';
+import { addWslPendingRestart, clearWslPendingRestart, normalizeWslPendingRestarts, type WslAction, type WslCatalog, type WslConfigDocument, type WslConfigTarget, type WslDiagnostics, type WslJob, type WslSnapshot } from '../shared/wsl.ts';
 import {
   busiestGpu, DEFAULT_MONITOR_SETTINGS, diskPercent, fullestDisk, normalizeMonitorSettings,
   type MonitorSettings, type ProcessEntry, type Stats, type Warning,
 } from '../shared/stats.ts';
 
 const SETTINGS_KEY = 'system-monitor.settings.v2';
+const WSL_PENDING_RESTARTS_KEY = 'system-monitor.wsl-pending-restarts.v1';
 const TABS = ['overview', 'processes', 'performance', 'storage', 'hardware', 'health', 'optimization', 'openchamber', 'wsl', 'settings'] as const;
 type TabId = typeof TABS[number];
 type ProcessFilter = 'all' | 'cpu' | 'memory';
@@ -91,6 +92,10 @@ let wslConfig: WslConfigDocument | null = null;
 let wslConfigLoading = false;
 const wslDiagnostics: Record<string, WslDiagnostics | undefined> = {};
 let wslDiagnosticsLoading: string | null = null;
+let wslPendingRestarts: WslConfigTarget[] = [];
+let wslPendingRestartsHost: FrameContext['host'] | null = null;
+let wslPendingRestartsLoad: Promise<void> | null = null;
+let wslInFlightAction: WslAction | null = null;
 let wslRefreshTimer: ReturnType<typeof setInterval> | null = null;
 let workspaceProjects: GuestProject[] = [];
 let workspaceSessions: GuestSessionRecord[] = [];
@@ -937,6 +942,37 @@ const renderSettings = (tm: MonitorMessages, t: Messages): HTMLElement => {
   return view;
 };
 
+const loadWslPendingRestarts = async (host: FrameContext['host']): Promise<void> => {
+  if (wslPendingRestartsHost === host && wslPendingRestartsLoad) return wslPendingRestartsLoad;
+  wslPendingRestartsHost = host;
+  wslPendingRestartsLoad = host.storage.get(WSL_PENDING_RESTARTS_KEY)
+    .then((value) => { if (wslPendingRestartsHost === host) wslPendingRestarts = normalizeWslPendingRestarts(value); })
+    .catch(() => { if (wslPendingRestartsHost === host) wslPendingRestarts = []; })
+    .finally(() => { if (wslPendingRestartsHost === host) wslPendingRestartsLoad = null; });
+  return wslPendingRestartsLoad;
+};
+
+const persistWslPendingRestarts = async (targets: WslConfigTarget[]): Promise<void> => {
+  if (!current) return;
+  const host = current.host;
+  wslPendingRestarts = normalizeWslPendingRestarts(targets);
+  try {
+    await host.storage.set(WSL_PENDING_RESTARTS_KEY, wslPendingRestarts as unknown as JsonValue);
+  } catch {
+    wslStatusMessage = current?.tm.pendingRestartStorageError ?? 'Could not save pending WSL restart state.';
+  }
+  if (activeTab === 'wsl') renderWslTab();
+};
+
+const applyWslActionToPendingRestarts = async (action: WslAction): Promise<void> => {
+  if (current) await loadWslPendingRestarts(current.host);
+  if (action.action === 'shutdown' || action.action === 'force-shutdown') {
+    await persistWslPendingRestarts(clearWslPendingRestart(wslPendingRestarts));
+  } else if (action.action === 'start' || action.action === 'restart' || action.action === 'unregister') {
+    await persistWslPendingRestarts(clearWslPendingRestart(wslPendingRestarts, { kind: 'distribution', distro: action.distro }));
+  }
+};
+
 const renderWslTab = (): void => {
   if (!current) return;
   const view = renderWslView({
@@ -948,6 +984,7 @@ const renderWslTab = (): void => {
     catalogLoading: wslCatalogLoading,
     config: wslConfig,
     configLoading: wslConfigLoading,
+    pendingRestarts: wslPendingRestarts,
     diagnostics: wslDiagnostics,
     diagnosticsLoading: wslDiagnosticsLoading,
     t: current.t,
@@ -1007,6 +1044,7 @@ const loadWslConfig = async (target: WslConfigTarget): Promise<void> => {
 const saveWslConfig = async (target: WslConfigTarget, text: string): Promise<void> => {
   if (!current || activeTab !== 'wsl' || wslBusy) return;
   const host = current.host;
+  await loadWslPendingRestarts(host);
   const confirmation = target.kind === 'global' ? 'SAVE GLOBAL WSL CONFIG' : `SAVE WSL CONFIG ${target.distro}`;
   wslBusy = true;
   renderWslTab();
@@ -1018,6 +1056,7 @@ const saveWslConfig = async (target: WslConfigTarget, text: string): Promise<voi
     const result = JSON.parse(response.body) as { ok?: boolean; message?: string };
     if (response.status !== 200 || !result.ok) throw new Error(result.message ?? current.tm.actionFailed);
     wslConfig = { target, text, exists: true };
+    await persistWslPendingRestarts(addWslPendingRestart(wslPendingRestarts, target));
     wslStatusMessage = current.tm.configSaved;
     await host.toast({ kind: 'success', message: current.tm.configSaved }).catch(() => undefined);
   } catch (error) {
@@ -1094,6 +1133,9 @@ const pollWslJob = async (jobId: string): Promise<void> => {
       wslJobId = null;
       wslBusy = false;
       wslStatusMessage = job.message;
+      const completedAction = wslInFlightAction;
+      wslInFlightAction = null;
+      if (job.state === 'succeeded' && completedAction) await applyWslActionToPendingRestarts(completedAction);
       const host = current.host;
       await host.toast({ kind: job.state === 'succeeded' ? 'success' : 'error', message: job.message }).catch(() => undefined);
       renderWslTab();
@@ -1126,6 +1168,7 @@ const runWslActionFromPanel = async (action: WslAction): Promise<void> => {
       return;
     }
     wslJobId = body.id;
+    wslInFlightAction = action;
     wslStatusMessage = current?.tm.actionInProgress ?? 'Working…';
     renderWslTab();
     resumeWslJobPolling();
@@ -1145,6 +1188,7 @@ const changeTab = (id: string): void => {
   renderActive();
   if (activeTab === 'openchamber') void subscribeWorkspaceProjects();
   if (activeTab === 'wsl') {
+    if (current) void loadWslPendingRestarts(current.host).then(() => { if (activeTab === 'wsl') renderWslTab(); });
     if (!wslSnapshot) void refreshWslSnapshot();
     resumeWslJobPolling();
   }

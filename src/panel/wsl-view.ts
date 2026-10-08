@@ -25,6 +25,7 @@ export type WslPanelOptions = {
   catalogLoading: boolean;
   config: WslConfigDocument | null;
   configLoading: boolean;
+  pendingRestarts: WslConfigTarget[];
   diagnostics: Record<string, WslDiagnostics | undefined>;
   diagnosticsLoading: string | null;
   t: Messages;
@@ -375,6 +376,17 @@ export const renderWslView = (options: WslPanelOptions): HTMLElement => {
   actionButton(header, options.tm.refresh, options.onRefresh, options.loading || options.busy, 'ghost');
   view.append(header);
   if (options.statusMessage) view.append(element('div', 'wsl-status', options.statusMessage));
+  if (options.pendingRestarts.length > 0) {
+    const pending = element('div', 'wsl-config-warning');
+    pending.setAttribute('role', 'status');
+    pending.append(element('strong', 'card-title', options.tm.pendingRestartTitle));
+    for (const target of options.pendingRestarts) {
+      pending.append(element('div', 'caption', target.kind === 'global'
+        ? options.tm.pendingRestartGlobal
+        : format(options.tm.pendingRestartDistribution, { distro: target.distro })));
+    }
+    view.append(pending);
+  }
 
   const snapshot = options.snapshot;
   if (options.loading && !snapshot) {
