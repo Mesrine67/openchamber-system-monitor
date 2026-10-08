@@ -37,6 +37,7 @@ export type MonitorMessages = {
   noCatalogItems: string; loadCatalog: string;
   defaultUserWarning: string;
   globalConfig: string; distributionConfig: string; editConfig: string; saveConfig: string; configNotice: string; configSaved: string;
+  configSummary: string; configBootCommandWarning: string; configNetworkingDisabledWarning: string;
   runningCount: string; defaultWslVersion: string; setDefaultWslVersion: string; updateWsl: string; updateWslWarning: string; defaultVersionWarning: string;
   searchDistributions: string; stateFilter: string; versionFilter: string; allDistributions: string; runningFilter: string; stoppedFilter: string; noFilteredDistributions: string;
   sourceFilter: string; source: string; storeSource: string; importedSource: string; unknownSource: string; virtualDiskSize: string;
@@ -88,6 +89,8 @@ const en: MonitorMessages = {
   globalConfig: 'Global WSL settings', distributionConfig: '{distro} settings', editConfig: 'Edit configuration', saveConfig: 'Save configuration',
   configNotice: 'Configuration can affect startup, networking, file access, or root-run boot commands. Save only settings you understand. Changes may require a full WSL shutdown.',
   configSaved: 'WSL configuration saved. Restart WSL or the affected distribution to apply it.',
+  configSummary: 'Detected settings', configBootCommandWarning: 'This configuration runs a command as root when the distribution starts. Review it before saving.',
+  configNetworkingDisabledWarning: 'Networking is explicitly disabled for the WSL 2 virtual machine.',
   runningCount: '{running} running of {total} distributions', defaultWslVersion: 'Default WSL version', setDefaultWslVersion: 'Set default version to WSL {version}',
   updateWsl: 'Update WSL', updateWslWarning: 'This downloads and installs the current WSL package. Running distributions may need to be restarted.',
   defaultVersionWarning: 'This changes the WSL version used for newly installed distributions. Existing distributions are not converted.',
@@ -142,6 +145,8 @@ const fr: MonitorMessages = {
   globalConfig: 'Réglages globaux WSL', distributionConfig: 'Réglages de {distro}', editConfig: 'Modifier la configuration', saveConfig: 'Enregistrer la configuration',
   configNotice: 'La configuration peut modifier le démarrage, le réseau, l’accès aux fichiers ou exécuter des commandes en root au lancement. N’enregistre que des réglages que tu comprends. Un arrêt complet de WSL peut être nécessaire pour appliquer les changements.',
   configSaved: 'Configuration WSL enregistrée. Redémarre WSL ou la distribution concernée pour appliquer les changements.',
+  configSummary: 'Réglages détectés', configBootCommandWarning: 'Cette configuration exécute une commande en tant que root au démarrage de la distribution. Vérifie-la avant l’enregistrement.',
+  configNetworkingDisabledWarning: 'Le réseau est explicitement désactivé pour la machine virtuelle WSL 2.',
   runningCount: '{running} en cours sur {total} distributions', defaultWslVersion: 'Version WSL par défaut', setDefaultWslVersion: 'Définir la version par défaut sur WSL {version}',
   updateWsl: 'Mettre WSL à jour', updateWslWarning: 'Cette action télécharge et installe le paquet WSL actuel. Les distributions en cours peuvent devoir être redémarrées.',
   defaultVersionWarning: 'Ce réglage s’applique aux prochaines installations. Il ne convertit pas les distributions existantes.',

@@ -1,7 +1,7 @@
 import { mountBadge, mountButton, mountSelect, mountTextField, type ButtonVariant } from '@openchamber/sdk/ui';
 import { format, type Messages } from '../i18n/messages.ts';
 import type { MonitorMessages } from '../i18n/monitor.ts';
-import type { WslAction, WslCatalog, WslConfigDocument, WslConfigTarget, WslDiagnostics, WslDistribution, WslSnapshot } from '../shared/wsl.ts';
+import { inspectWslConfig, type WslAction, type WslCatalog, type WslConfigDocument, type WslConfigTarget, type WslDiagnostics, type WslDistribution, type WslSnapshot } from '../shared/wsl.ts';
 import { element } from '../frame/ui.ts';
 
 type ConfirmableAction = Extract<WslAction, { action: 'unregister' | 'shutdown' | 'force-shutdown' | 'set-version' | 'compact' | 'move' | 'resize' | 'clone' | 'rename' | 'set-default-user' | 'set-default-version' | 'update-wsl' }>;
@@ -57,10 +57,10 @@ const textField = (parent: HTMLElement, key: string, label: string, placeholder:
   return () => (fieldDrafts.get(key) ?? '').trim();
 };
 
-const textArea = (parent: HTMLElement, key: string, label: string, initial: string): (() => string) => {
+const textArea = (parent: HTMLElement, key: string, label: string, initial: string, onChange?: (value: string) => void): (() => string) => {
   const slot = element('div', 'wsl-config-field');
   if (!fieldDrafts.has(key)) fieldDrafts.set(key, initial);
-  mountTextField(slot, { label, value: fieldDrafts.get(key) ?? '', multiline: true, rows: 16, mono: true, onChange: (next) => { fieldDrafts.set(key, next); } });
+  mountTextField(slot, { label, value: fieldDrafts.get(key) ?? '', multiline: true, rows: 16, mono: true, onChange: (next) => { fieldDrafts.set(key, next); onChange?.(next); } });
   parent.append(slot);
   return () => fieldDrafts.get(key) ?? '';
 };
@@ -341,7 +341,22 @@ export const renderWslView = (options: WslPanelOptions): HTMLElement => {
     configCard.append(element('h3', 'card-title', configTarget.kind === 'global'
       ? options.tm.globalConfig : format(options.tm.distributionConfig, { distro: configTarget.distro })));
     configCard.append(element('div', 'caption', options.tm.configNotice));
-    const value = textArea(configCard, configKey, configTarget.kind === 'global' ? '.wslconfig' : '/etc/wsl.conf', options.config.text);
+    const insightHeading = element('h4', 'card-title wsl-detail-heading', options.tm.configSummary);
+    const insightSummary = element('div', 'wsl-detail-grid');
+    const bootWarning = element('div', 'wsl-config-warning', options.tm.configBootCommandWarning);
+    const networkWarning = element('div', 'wsl-config-warning', options.tm.configNetworkingDisabledWarning);
+    const renderInsights = (text: string): void => {
+      const configInsights = inspectWslConfig(text);
+      insightSummary.replaceChildren();
+      for (const setting of configInsights.insights) row(insightSummary, `[${setting.section}] ${setting.key}`, setting.value);
+      insightHeading.hidden = configInsights.insights.length === 0;
+      insightSummary.hidden = configInsights.insights.length === 0;
+      bootWarning.hidden = !configInsights.hasBootCommand;
+      networkWarning.hidden = !configInsights.networkingDisabled;
+    };
+    renderInsights(fieldDrafts.get(configKey) ?? options.config.text);
+    configCard.append(insightHeading, insightSummary, bootWarning, networkWarning);
+    const value = textArea(configCard, configKey, configTarget.kind === 'global' ? '.wslconfig' : '/etc/wsl.conf', options.config.text, renderInsights);
     actionButton(configCard, options.tm.saveConfig, () => {
       const expected = configTarget.kind === 'global' ? 'SAVE GLOBAL WSL CONFIG' : `SAVE WSL CONFIG ${configTarget.distro}`;
       exactConfirm({

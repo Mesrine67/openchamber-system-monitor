@@ -2,9 +2,33 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { parseWslCatalog, parseWslDefaultVersion, parseWslDiagnostics, parseWslDistroDetails, parseWslList, parseWslRegistrationMetadata, parseWslVersions } from '../src/service/collectors/parse-wsl.ts';
 import { withDefaultWslUser } from '../src/service/collectors/parse-wsl-conf.ts';
-import { parseWslAction, parseWslConfigUpdate } from '../src/shared/wsl.ts';
+import { inspectWslConfig, parseWslAction, parseWslConfigUpdate } from '../src/shared/wsl.ts';
 
 describe('WSL parser', () => {
+  test('summarizes known WSL settings without losing unknown settings and flags risky behavior', () => {
+    const result = inspectWslConfig('[wsl2]\r\nmemory=8GB\r\nprocessors = 6\r\nnetworkingMode=none\r\ncustomFutureOption=value\r\n[boot]\r\nsystemd=true\r\ncommand=service docker start\r\n');
+    expect(result.insights).toEqual([
+      { section: 'wsl2', key: 'memory', value: '8GB' },
+      { section: 'wsl2', key: 'processors', value: '6' },
+      { section: 'wsl2', key: 'networkingmode', value: 'none' },
+      { section: 'boot', key: 'systemd', value: 'true' },
+      { section: 'boot', key: 'command', value: 'service docker start' },
+    ]);
+    expect(result.hasBootCommand).toBe(true);
+    expect(result.networkingDisabled).toBe(true);
+  });
+
+  test('summarizes common global and experimental settings with case-insensitive keys', () => {
+    const result = inspectWslConfig('[wsl2]\nnestedVirtualization=true\ndebugConsole=true\n[experimental]\nsparseVhd=true\nbestEffortDnsParsing=true\n[general]\ninstanceIdleTimeout=-1');
+    expect(result.insights).toEqual([
+      { section: 'wsl2', key: 'nestedvirtualization', value: 'true' },
+      { section: 'wsl2', key: 'debugconsole', value: 'true' },
+      { section: 'experimental', key: 'sparsevhd', value: 'true' },
+      { section: 'experimental', key: 'besteffortdnsparsing', value: 'true' },
+      { section: 'general', key: 'instanceidletimeout', value: '-1' },
+    ]);
+  });
+
   test('parses bounded process and listening-port diagnostics', async () => {
     const fixture = await readFile(new URL('./fixtures/wsl-diagnostics.txt', import.meta.url), 'utf8');
     expect(parseWslDiagnostics(fixture)).toEqual({

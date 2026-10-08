@@ -12,6 +12,8 @@ The UI remains vanilla TypeScript. SDK UI controls provide host-consistent butto
 
 The Windows-only WSL manager is an opt-in tab in the rail/page panel. It is separate from the fast system sampler and makes no WSL calls until the user selects the tab. It uses the SDK controls, host theme tokens, and extension locale system. Its refresh interval is 30 seconds while the tab is visible, with WSL version, registry metadata and guest probes cached separately. Memory is reported once for the shared WSL 2 utility VM, never duplicated as if each distro owned a separate VM.
 
+When a WSL config file is opened, the editor remains the source of truth and preserves unknown settings. A read-only parser surfaces a small allowlist of documented, high-value settings and warns about a custom `[boot] command` or `networkingMode=none`; it does not reinterpret or rewrite the file. WSL configuration changes are applied by WSL at startup, so the UI must explain that saving a file does not itself reload the WSL VM. See Microsoft's [WSL configuration reference](https://learn.microsoft.com/en-us/windows/wsl/wsl-config).
+
 These decisions follow the official [extension guide](https://docs.openchamber.dev/extensions/), [SDK overview](https://docs.openchamber.dev/sdk/), [host API](https://docs.openchamber.dev/sdk/host/), and [UI Kit](https://docs.openchamber.dev/sdk/ui/). In particular, a contributed page is discovered by the host's Extension pages menu, storage is provided by the host, and the panel itself remains a sandboxed UI surface.
 
 ## Data ownership and contracts
