@@ -190,6 +190,10 @@ describe('WSL parser', () => {
     expect(parseWslAction({ action: 'import', distro: 'UbuntuCopy', location: 'D:\\WSL\\UbuntuCopy', file: 'D:\\Backups\\Ubuntu.vhdx', version: 1, format: 'vhd' })).toBeNull();
     expect(parseWslAction({ action: 'import', distro: 'UbuntuCopy', location: 'D:\\WSL\\UbuntuCopy', file: 'D:\\Backups\\Ubuntu.vhdx', version: 2, format: 'vhd' }))
       .toEqual({ action: 'import', distro: 'UbuntuCopy', location: 'D:\\WSL\\UbuntuCopy', file: 'D:\\Backups\\Ubuntu.vhdx', version: 2, format: 'vhd' });
+    expect(parseWslAction({ action: 'import-in-place', distro: 'UbuntuVhd', file: 'D:\\Backups\\Ubuntu.vhdx' }))
+      .toEqual({ action: 'import-in-place', distro: 'UbuntuVhd', file: 'D:\\Backups\\Ubuntu.vhdx' });
+    expect(parseWslAction({ action: 'import-in-place', distro: 'UbuntuVhd', file: 'D:\\Backups\\Ubuntu.tar' })).toBeNull();
+    expect(parseWslAction({ action: 'import-in-place', distro: '--exec', file: 'D:\\Backups\\Ubuntu.vhdx' })).toBeNull();
     expect(parseWslAction({ action: 'unregister', distro: 'Ubuntu', confirmation: 'yes' })).toBeNull();
     expect(parseWslAction({ action: 'compact', distro: 'Ubuntu', confirmation: 'Ubuntu' })).toBeNull();
     expect(parseWslAction({ action: 'compact', distro: 'Ubuntu', confirmation: 'COMPACT Ubuntu' }))

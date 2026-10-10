@@ -353,6 +353,12 @@ trap - EXIT`;
       const result = await run(args, 900_000);
       return result.ok ? success(`${action.distro} importée.`) : failed(result);
     }
+    case 'import-in-place': {
+      const source = await lstat(action.file).then((stat) => stat.isFile()).catch(() => false);
+      if (!source) return { ok: false, message: 'Le fichier VHDX est introuvable ou n’est pas un fichier.' };
+      const result = await run(['--import-in-place', action.distro, action.file], 900_000);
+      return result.ok ? success(`${action.distro} enregistrée depuis le disque VHDX.`) : failed(result);
+    }
     case 'clone': {
       if (!knownName(action.newDistro)) return { ok: false, message: 'Nom de la nouvelle distribution invalide.' };
       const copied = await createWslCopy(action.distro, action.newDistro, action.location, action.version);

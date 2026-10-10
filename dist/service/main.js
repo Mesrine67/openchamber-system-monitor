@@ -2353,6 +2353,8 @@ var parseWslAction = (value) => {
       return isDistro && safeWindowsPath(value.file) && (value.format === "tar" || value.format === "vhd") ? { action: "export", distro, file: value.file, format: value.format } : null;
     case "import":
       return isDistro && safeWindowsPath(value.location) && safeWindowsPath(value.file) && (value.version === 1 || value.version === 2) && (value.format === "tar" || value.format === "vhd") && (value.format !== "vhd" || value.version === 2) ? { action: "import", distro, location: value.location, file: value.file, version: value.version, format: value.format } : null;
+    case "import-in-place":
+      return isDistro && safeWindowsPath(value.file) && /\.vhdx$/i.test(value.file) ? { action: "import-in-place", distro, file: value.file } : null;
     case "clone":
     case "rename": {
       const newDistro = value.newDistro;
@@ -3124,6 +3126,13 @@ trap - EXIT`;
         args.push("--vhd");
       const result = await run2(args, 900000);
       return result.ok ? success(`${action.distro} importée.`) : failed(result);
+    }
+    case "import-in-place": {
+      const source = await lstat(action.file).then((stat) => stat.isFile()).catch(() => false);
+      if (!source)
+        return { ok: false, message: "Le fichier VHDX est introuvable ou n’est pas un fichier." };
+      const result = await run2(["--import-in-place", action.distro, action.file], 900000);
+      return result.ok ? success(`${action.distro} enregistrée depuis le disque VHDX.`) : failed(result);
     }
     case "clone": {
       if (!knownName(action.newDistro))

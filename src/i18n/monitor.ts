@@ -34,6 +34,7 @@ export type MonitorMessages = {
   installDistribution: string; onlineCatalog: string; selectDistribution: string; exportDistribution: string; exportTo: string;
   importDistribution: string; importArchive: string; distroName: string; installLocation: string; versionLabel: string;
   archiveFormat: string; tarFormat: string; vhdFormat: string; vhdRequiresWsl2: string;
+  importVhdInPlace: string; importVhdInPlaceHelp: string;
   moveDistro: string; resizeDisk: string; enableSparse: string; disableSparse: string; moveWarning: string; resizeWarning: string;
   operationSection: string; manageSection: string; pathPlaceholder: string; archivePlaceholder: string; usernamePlaceholder: string;
   noCatalogItems: string; loadCatalog: string;
@@ -98,6 +99,7 @@ const en: MonitorMessages = {
   installDistribution: 'Install distribution', onlineCatalog: 'Online catalog', selectDistribution: 'Select a distribution', exportDistribution: 'Export distribution', exportTo: 'Export archive to',
   importDistribution: 'Import distribution', importArchive: 'Import archive', distroName: 'New distribution name', installLocation: 'Installation folder', versionLabel: 'WSL version',
   archiveFormat: 'Archive format', tarFormat: 'TAR archive', vhdFormat: 'VHDX (WSL 2)', vhdRequiresWsl2: 'VHDX import requires WSL 2.',
+  importVhdInPlace: 'Register an existing VHDX', importVhdInPlaceHelp: 'The VHDX must use ext4. WSL registers this file directly; it does not copy it.',
   moveDistro: 'Move distribution', resizeDisk: 'Resize virtual disk', enableSparse: 'Enable sparse mode', disableSparse: 'Disable sparse mode',
   moveWarning: 'This moves {distro} to another folder and may take several minutes. Ensure WSL has enough free space at the destination.',
   resizeWarning: 'This stops all WSL distributions before changing the virtual disk size for {distro}.',
@@ -171,6 +173,7 @@ const fr: MonitorMessages = {
   installDistribution: 'Installer une distribution', onlineCatalog: 'Catalogue en ligne', selectDistribution: 'Choisir une distribution', exportDistribution: 'Exporter la distribution', exportTo: 'Exporter l’archive vers',
   importDistribution: 'Importer une distribution', importArchive: 'Archive à importer', distroName: 'Nom de la nouvelle distribution', installLocation: 'Dossier d’installation', versionLabel: 'Version WSL',
   archiveFormat: 'Format d’archive', tarFormat: 'Archive TAR', vhdFormat: 'VHDX (WSL 2)', vhdRequiresWsl2: 'L’import VHDX nécessite WSL 2.',
+  importVhdInPlace: 'Enregistrer un VHDX existant', importVhdInPlaceHelp: 'Le VHDX doit être au format ext4. WSL enregistre ce fichier directement, sans le copier.',
   moveDistro: 'Déplacer la distribution', resizeDisk: 'Redimensionner le disque virtuel', enableSparse: 'Activer le mode sparse', disableSparse: 'Désactiver le mode sparse',
   moveWarning: 'Cette opération déplace {distro} vers un autre dossier et peut durer plusieurs minutes. Vérifie l’espace libre à destination.',
   resizeWarning: 'Cette opération arrête toutes les distributions WSL avant de modifier la taille du disque virtuel de {distro}.',

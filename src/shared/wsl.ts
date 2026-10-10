@@ -49,6 +49,7 @@ export type WslAction =
   | { action: 'install'; distro: string }
   | { action: 'export'; distro: string; file: string; format: 'tar' | 'vhd' }
   | { action: 'import'; distro: string; location: string; file: string; version: 1 | 2; format: 'tar' | 'vhd' }
+  | { action: 'import-in-place'; distro: string; file: string }
   | { action: 'clone'; distro: string; newDistro: string; location: string; version: 1 | 2; confirmation: string }
   | { action: 'rename'; distro: string; newDistro: string; location: string; version: 1 | 2; confirmation: string }
   | { action: 'move'; distro: string; location: string; confirmation: string }
@@ -207,6 +208,9 @@ export const parseWslAction = (value: unknown): WslAction | null => {
       return isDistro && safeWindowsPath(value.location) && safeWindowsPath(value.file) && (value.version === 1 || value.version === 2)
         && (value.format === 'tar' || value.format === 'vhd') && (value.format !== 'vhd' || value.version === 2)
         ? { action: 'import', distro, location: value.location, file: value.file, version: value.version, format: value.format } : null;
+    case 'import-in-place':
+      return isDistro && safeWindowsPath(value.file) && /\.vhdx$/i.test(value.file)
+        ? { action: 'import-in-place', distro, file: value.file } : null;
     case 'clone': case 'rename': {
       const newDistro = value.newDistro;
       const expected = typeof newDistro === 'string' ? `${value.action.toLocaleUpperCase()} ${distro} AS ${newDistro}` : '';

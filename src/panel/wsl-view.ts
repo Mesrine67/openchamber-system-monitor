@@ -604,6 +604,19 @@ export const renderWslView = (options: WslPanelOptions): HTMLElement => {
   importCard.append(importFields);
   view.append(importCard);
 
+  const inPlaceCard = element('article', 'card wsl-operations');
+  inPlaceCard.append(element('h3', 'card-title', options.tm.importVhdInPlace));
+  inPlaceCard.append(element('div', 'caption', options.tm.importVhdInPlaceHelp));
+  const inPlaceFields = element('div', 'wsl-fields');
+  const inPlaceName = textField(inPlaceFields, 'import-in-place:name', options.tm.distroName, 'UbuntuVhd');
+  const inPlaceFile = textField(inPlaceFields, 'import-in-place:file', options.tm.importArchive, 'D:\\Backups\\Ubuntu.vhdx');
+  actionButton(inPlaceFields, options.tm.importVhdInPlace, () => {
+    const distro = inPlaceName(); const file = inPlaceFile();
+    if (distro && file) options.onAction({ action: 'import-in-place', distro, file });
+  }, options.busy, 'outline');
+  inPlaceCard.append(inPlaceFields);
+  view.append(inPlaceCard);
+
   if (snapshot.error) view.append(element('div', 'caption', snapshot.error));
   if (snapshot.distributions.length === 0) {
     view.append(element('div', 'empty', options.tm.noDistributions));
