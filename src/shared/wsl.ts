@@ -143,14 +143,15 @@ export const inspectWslConfig = (text: string): { insights: WslConfigInsight[]; 
     settings.set(`${section}.${key}`, value);
   }
   const visible = new Set([
-    'wsl2.memory', 'wsl2.processors', 'wsl2.swap', 'wsl2.networkingmode', 'wsl2.localhostforwarding',
+    'wsl2.memory', 'wsl2.processors', 'wsl2.swap', 'wsl2.defaultvhdsize', 'wsl2.networkingmode', 'wsl2.localhostforwarding',
+    'wsl2.dnsproxy', 'wsl2.hostaddressloopback', 'wsl2.ignoredports', 'wsl2.safemode', 'wsl2.maxcrashdumpcount',
     'wsl2.dnstunneling', 'wsl2.autoproxy', 'wsl2.guiapplications', 'wsl2.gpusupport', 'wsl2.nestedvirtualization',
     'wsl2.debugconsole', 'wsl2.vmidletimeout',
     'experimental.sparsevhd', 'experimental.besteffortdnsparsing', 'experimental.automemoryreclaim',
     'general.instanceidletimeout',
-    'boot.systemd', 'boot.command', 'automount.enabled', 'automount.mountfstab',
-    'interop.enabled', 'interop.appendwindowspath', 'network.generatehosts', 'network.generateresolvconf',
-    'user.default',
+    'boot.systemd', 'boot.command', 'boot.protectbinfmt', 'boot.inittimeout', 'automount.enabled', 'automount.mountfstab', 'automount.root', 'automount.options', 'automount.cgroups', 'automount.ldconfig',
+    'interop.enabled', 'interop.appendwindowspath', 'network.generatehosts', 'network.generateresolvconf', 'network.hostname',
+    'gpu.enabled', 'gpu.appendlibpath', 'time.usewindowstimezone', 'user.default',
   ]);
   const insights = [...settings].filter(([path]) => visible.has(path)).map(([path, value]) => {
     const [sectionName, key] = path.split('.');

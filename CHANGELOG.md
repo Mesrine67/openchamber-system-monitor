@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0 - 2026-10-10
+
+- Expand the guided WSL configuration with networking, mount, recovery, GPU integration, crash-dump, and time-sync options while preserving comments and unknown settings.
+- Add additional validated WSL recovery and GPU configuration actions, with localized UI labels and parser coverage.
+- Keep the OpenAI System Tools plugin package versioned independently from this OpenChamber extension release.
+
 ## 1.2.0 - 2026-10-08
 
 - Add an on-demand Windows WSL manager for distribution inventory, guest diagnostics, lifecycle actions, Microsoft catalog install, import/export/clone/rename, supported configuration files, and virtual-disk operations.
