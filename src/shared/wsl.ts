@@ -149,8 +149,8 @@ export const inspectWslConfig = (text: string): { insights: WslConfigInsight[]; 
     'wsl2.debugconsole', 'wsl2.vmidletimeout',
     'experimental.sparsevhd', 'experimental.besteffortdnsparsing', 'experimental.automemoryreclaim',
     'general.instanceidletimeout',
-    'boot.systemd', 'boot.command', 'boot.protectbinfmt', 'boot.inittimeout', 'automount.enabled', 'automount.mountfstab',
-    'interop.enabled', 'interop.appendwindowspath', 'network.generatehosts', 'network.generateresolvconf',
+    'boot.systemd', 'boot.command', 'boot.protectbinfmt', 'boot.inittimeout', 'automount.enabled', 'automount.mountfstab', 'automount.root', 'automount.options', 'automount.cgroups',
+    'interop.enabled', 'interop.appendwindowspath', 'network.generatehosts', 'network.generateresolvconf', 'network.hostname',
     'gpu.enabled', 'gpu.appendlibpath', 'time.usewindowstimezone', 'user.default',
   ]);
   const insights = [...settings].filter(([path]) => visible.has(path)).map(([path, value]) => {

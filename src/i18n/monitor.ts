@@ -51,6 +51,7 @@ export type MonitorMessages = {
   configDefaultVhdSize: string; configDnsProxy: string; configHostAddressLoopback: string; configIgnoredPorts: string;
   configGenerateHosts: string; configGenerateResolvConf: string; configProtectBinfmt: string; configInitTimeout: string;
   configGpuEnabled: string; configAppendGpuLibPath: string; configUseWindowsTimezone: string;
+  configAutomountRoot: string; configAutomountOptions: string; configCgroups: string; configDistroHostname: string;
   configInterop: string; configWindowsPath: string; configNoChange: string;
   runningCount: string; defaultWslVersion: string; setDefaultWslVersion: string; updateWsl: string; updateWslWarning: string; defaultVersionWarning: string;
   searchDistributions: string; stateFilter: string; versionFilter: string; allDistributions: string; runningFilter: string; stoppedFilter: string; noFilteredDistributions: string;
@@ -129,6 +130,7 @@ const en: MonitorMessages = {
   configDefaultVhdSize: 'Maximum size for new distro disks (for example 1TB)', configDnsProxy: 'Use the Windows DNS proxy (NAT mode)', configHostAddressLoopback: 'Allow host IPv4 address loopback (mirrored mode)', configIgnoredPorts: 'Ports Linux may bind despite Windows listeners (mirrored mode; comma-separated)',
   configGenerateHosts: 'Generate /etc/hosts automatically', configGenerateResolvConf: 'Generate /etc/resolv.conf automatically', configProtectBinfmt: 'Protect systemd binfmt registrations', configInitTimeout: 'Wait for systemd initialization (ms)',
   configGpuEnabled: 'Allow GPU access in this distribution', configAppendGpuLibPath: 'Add WSL GPU libraries to linker path', configUseWindowsTimezone: 'Use and sync the Windows time zone',
+  configAutomountRoot: 'Mount Windows drives under this Linux directory', configAutomountOptions: 'DrvFs options for automatically mounted drives', configCgroups: 'Cgroup hierarchy', configDistroHostname: 'Linux distribution hostname',
   configSystemd: 'Enable systemd', configAutoMount: 'Automatically mount Windows drives', configMountFstab: 'Process /etc/fstab at startup',
   configInterop: 'Allow launching Windows processes', configWindowsPath: 'Add Windows paths to Linux PATH', configNoChange: 'No change',
   runningCount: '{running} running of {total} distributions', defaultWslVersion: 'Default WSL version', setDefaultWslVersion: 'Set default version to WSL {version}',
@@ -211,6 +213,7 @@ const fr: MonitorMessages = {
   configDefaultVhdSize: 'Taille maximale des nouveaux disques de distribution (exemple : 1TB)', configDnsProxy: 'Utiliser le proxy DNS Windows (mode NAT)', configHostAddressLoopback: 'Autoriser la boucle vers les adresses IPv4 de l’hôte (mode mirrored)', configIgnoredPorts: 'Ports que Linux peut utiliser malgré Windows (mode mirrored ; séparés par des virgules)',
   configGenerateHosts: 'Générer automatiquement /etc/hosts', configGenerateResolvConf: 'Générer automatiquement /etc/resolv.conf', configProtectBinfmt: 'Protéger les enregistrements binfmt de systemd', configInitTimeout: 'Attendre l’initialisation de systemd (ms)',
   configGpuEnabled: 'Autoriser le GPU dans cette distribution', configAppendGpuLibPath: 'Ajouter les bibliothèques GPU WSL au chemin de liaison', configUseWindowsTimezone: 'Utiliser et synchroniser le fuseau horaire Windows',
+  configAutomountRoot: 'Monter les lecteurs Windows sous ce dossier Linux', configAutomountOptions: 'Options DrvFs des lecteurs montés automatiquement', configCgroups: 'Hiérarchie cgroups', configDistroHostname: 'Nom d’hôte de la distribution Linux',
   configSystemd: 'Activer systemd', configAutoMount: 'Monter automatiquement les lecteurs Windows', configMountFstab: 'Traiter /etc/fstab au démarrage',
   configInterop: 'Autoriser le lancement des processus Windows', configWindowsPath: 'Ajouter les chemins Windows au PATH Linux', configNoChange: 'Ne pas modifier',
   runningCount: '{running} en cours sur {total} distributions', defaultWslVersion: 'Version WSL par défaut', setDefaultWslVersion: 'Définir la version par défaut sur WSL {version}',
