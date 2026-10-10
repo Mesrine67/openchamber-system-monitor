@@ -194,6 +194,10 @@ describe('WSL parser', () => {
       .toEqual({ action: 'import-in-place', distro: 'UbuntuVhd', file: 'D:\\Backups\\Ubuntu.vhdx' });
     expect(parseWslAction({ action: 'import-in-place', distro: 'UbuntuVhd', file: 'D:\\Backups\\Ubuntu.tar' })).toBeNull();
     expect(parseWslAction({ action: 'import-in-place', distro: '--exec', file: 'D:\\Backups\\Ubuntu.vhdx' })).toBeNull();
+    expect(parseWslAction({ action: 'install-from-file', distro: 'MyLinux', file: 'D:\\Downloads\\MyLinux.wsl', location: 'D:\\WSL\\MyLinux', version: 2, confirmation: 'INSTALL MyLinux FROM FILE' }))
+      .toEqual({ action: 'install-from-file', distro: 'MyLinux', file: 'D:\\Downloads\\MyLinux.wsl', location: 'D:\\WSL\\MyLinux', version: 2, confirmation: 'INSTALL MyLinux FROM FILE' });
+    expect(parseWslAction({ action: 'install-from-file', distro: 'MyLinux', file: 'D:\\Downloads\\MyLinux.tar', location: 'D:\\WSL\\MyLinux', version: 2, confirmation: 'INSTALL MyLinux FROM FILE' })).toBeNull();
+    expect(parseWslAction({ action: 'install-from-file', distro: 'MyLinux', file: 'D:\\Downloads\\MyLinux.wsl', location: 'D:\\WSL\\MyLinux', version: 2, confirmation: 'yes' })).toBeNull();
     expect(parseWslAction({ action: 'unregister', distro: 'Ubuntu', confirmation: 'yes' })).toBeNull();
     expect(parseWslAction({ action: 'compact', distro: 'Ubuntu', confirmation: 'Ubuntu' })).toBeNull();
     expect(parseWslAction({ action: 'compact', distro: 'Ubuntu', confirmation: 'COMPACT Ubuntu' }))

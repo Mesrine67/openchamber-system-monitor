@@ -337,6 +337,16 @@ trap - EXIT`;
       const result = await run(['--install', '--distribution', action.distro, '--no-launch'], 900_000);
       return result.ok ? success(`${action.distro} installée.`) : failed(result);
     }
+    case 'install-from-file': {
+      const source = await lstat(action.file).then((stat) => stat.isFile()).catch(() => false);
+      if (!source) return { ok: false, message: 'Le paquet WSL est introuvable ou n’est pas un fichier.' };
+      if (await pathExists(action.location)) return { ok: false, message: 'Le dossier d’installation existe déjà. Choisis un nouveau dossier.' };
+      const result = await run([
+        '--install', '--from-file', action.file, '--name', action.distro,
+        '--location', action.location, '--version', String(action.version), '--no-launch',
+      ], 900_000);
+      return result.ok ? success(`${action.distro} installée depuis le paquet local.`) : failed(result);
+    }
     case 'export': {
       if (await pathExists(action.file)) return { ok: false, message: 'Le fichier cible existe déjà. Choisis un nouveau chemin pour ne pas l’écraser.' };
       const result = await run(action.format === 'vhd'

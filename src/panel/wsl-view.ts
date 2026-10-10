@@ -5,13 +5,14 @@ import { inspectWslConfig, type WslAction, type WslCatalog, type WslConfigDocume
 import { withWslConfigSetting } from '../service/collectors/parse-wsl-conf.ts';
 import { element } from '../frame/ui.ts';
 
-type ConfirmableAction = Extract<WslAction, { action: 'unregister' | 'shutdown' | 'force-shutdown' | 'set-version' | 'compact' | 'move' | 'resize' | 'clone' | 'rename' | 'set-default-user' | 'set-default-version' | 'update-wsl' }>;
+type ConfirmableAction = Extract<WslAction, { action: 'unregister' | 'shutdown' | 'force-shutdown' | 'set-version' | 'compact' | 'move' | 'resize' | 'clone' | 'rename' | 'set-default-user' | 'set-default-version' | 'update-wsl' | 'install-from-file' }>;
 
 const fieldDrafts = new Map<string, string>();
 const configSettingDrafts = new Map<string, string>();
 let selectedWslDistro: string | null = null;
 let selectedImportVersion: 1 | 2 = 2;
 let selectedImportFormat: 'tar' | 'vhd' = 'tar';
+let selectedPackageInstallVersion: 1 | 2 = 2;
 const exportFormats = new Map<string, 'tar' | 'vhd'>();
 let distroSearch = '';
 let distroStateFilter = 'all';
@@ -129,6 +130,7 @@ const confirmable = (options: WslPanelOptions, action: ConfirmableAction): void 
     : action.action === 'set-default-version' ? `DEFAULT WSL ${action.version}`
     : action.action === 'shutdown' ? 'SHUTDOWN WSL'
     : action.action === 'force-shutdown' ? 'FORCE SHUTDOWN WSL'
+    : action.action === 'install-from-file' ? `INSTALL ${distroName} FROM FILE`
     : action.action === 'compact' ? `COMPACT ${distroName}`
       : action.action === 'set-version' ? `SET VERSION ${distroName} ${action.version}`
       : action.action === 'clone' || action.action === 'rename' ? `${action.action.toLocaleUpperCase()} ${distroName} AS ${action.newDistro}`
@@ -139,6 +141,7 @@ const confirmable = (options: WslPanelOptions, action: ConfirmableAction): void 
     : action.action === 'unregister' ? options.tm.dataRemovedWarning
     : action.action === 'force-shutdown' ? options.tm.forceShutdownWarning
       : action.action === 'shutdown' ? options.tm.shutdownWarning
+        : action.action === 'install-from-file' ? options.tm.installFromFileWarning
         : action.action === 'compact' ? format(options.tm.compactWarning, { distro: distroName })
         : action.action === 'set-version' ? options.tm.setVersionWarning
         : action.action === 'clone' ? options.tm.cloneWarning
@@ -153,6 +156,7 @@ const confirmable = (options: WslPanelOptions, action: ConfirmableAction): void 
       : action.action === 'set-version' ? options.tm.setVersion
         : action.action === 'move' ? options.tm.moveDistro : action.action === 'resize' ? options.tm.resizeDisk
           : action.action === 'set-default-user' ? options.tm.setDefaultUser
+          : action.action === 'install-from-file' ? options.tm.installFromFile
         : action.action === 'force-shutdown' ? options.tm.forceShutdown : options.tm.shutdownAll,
     body,
     expected,
@@ -560,6 +564,35 @@ export const renderWslView = (options: WslPanelOptions): HTMLElement => {
   if (options.catalog?.error) catalog.append(element('div', 'caption', options.catalog.error));
   if (options.catalog && options.catalog.items.length === 0) catalog.append(element('div', 'caption', options.tm.noCatalogItems));
   view.append(catalog);
+
+  const packageCard = element('article', 'card wsl-operations');
+  packageCard.append(element('h3', 'card-title', options.tm.installFromFile));
+  packageCard.append(element('div', 'caption', options.tm.installFromFileHelp));
+  const packageFields = element('div', 'wsl-fields');
+  const packageName = textField(packageFields, 'install-file:name', options.tm.distroName, 'MyLinux');
+  const packageLocation = textField(packageFields, 'install-file:location', options.tm.installLocation, options.tm.pathPlaceholder);
+  const packageFile = textField(packageFields, 'install-file:file', options.tm.wslPackageFile, 'D:\\Downloads\\Distribution.wsl');
+  const packageVersionSlot = element('div');
+  const packageVersionOptions = [{ id: '1', label: 'WSL 1' }, { id: '2', label: 'WSL 2' }];
+  const packageVersion = mountSelect(packageVersionSlot, {
+    label: options.tm.versionLabel,
+    value: String(selectedPackageInstallVersion),
+    options: packageVersionOptions,
+    onChange: (id) => {
+      selectedPackageInstallVersion = id === '1' ? 1 : 2;
+      packageVersion.update({ value: String(selectedPackageInstallVersion) });
+    },
+  });
+  packageFields.append(packageVersionSlot);
+  actionButton(packageFields, options.tm.installFromFile, () => {
+    const distro = packageName(); const location = packageLocation(); const file = packageFile();
+    if (distro && location && file) confirmable(options, {
+      action: 'install-from-file', distro, location, file, version: selectedPackageInstallVersion,
+      confirmation: `INSTALL ${distro} FROM FILE`,
+    });
+  }, options.busy, 'outline');
+  packageCard.append(packageFields);
+  view.append(packageCard);
 
   const importCard = element('article', 'card wsl-operations');
   importCard.append(element('h3', 'card-title', options.tm.importDistribution));

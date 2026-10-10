@@ -2355,6 +2355,10 @@ var parseWslAction = (value) => {
       return isDistro && safeWindowsPath(value.location) && safeWindowsPath(value.file) && (value.version === 1 || value.version === 2) && (value.format === "tar" || value.format === "vhd") && (value.format !== "vhd" || value.version === 2) ? { action: "import", distro, location: value.location, file: value.file, version: value.version, format: value.format } : null;
     case "import-in-place":
       return isDistro && safeWindowsPath(value.file) && /\.vhdx$/i.test(value.file) ? { action: "import-in-place", distro, file: value.file } : null;
+    case "install-from-file": {
+      const expected = `INSTALL ${distro} FROM FILE`;
+      return isDistro && safeWindowsPath(value.file) && /\.wsl$/i.test(value.file) && safeWindowsPath(value.location) && (value.version === 1 || value.version === 2) && confirmation === expected ? { action: "install-from-file", distro, file: value.file, location: value.location, version: value.version, confirmation } : null;
+    }
     case "clone":
     case "rename": {
       const newDistro = value.newDistro;
@@ -3108,6 +3112,26 @@ trap - EXIT`;
     case "install": {
       const result = await run2(["--install", "--distribution", action.distro, "--no-launch"], 900000);
       return result.ok ? success(`${action.distro} installée.`) : failed(result);
+    }
+    case "install-from-file": {
+      const source = await lstat(action.file).then((stat) => stat.isFile()).catch(() => false);
+      if (!source)
+        return { ok: false, message: "Le paquet WSL est introuvable ou n’est pas un fichier." };
+      if (await pathExists(action.location))
+        return { ok: false, message: "Le dossier d’installation existe déjà. Choisis un nouveau dossier." };
+      const result = await run2([
+        "--install",
+        "--from-file",
+        action.file,
+        "--name",
+        action.distro,
+        "--location",
+        action.location,
+        "--version",
+        String(action.version),
+        "--no-launch"
+      ], 900000);
+      return result.ok ? success(`${action.distro} installée depuis le paquet local.`) : failed(result);
     }
     case "export": {
       if (await pathExists(action.file))

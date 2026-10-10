@@ -35,6 +35,7 @@ export type MonitorMessages = {
   importDistribution: string; importArchive: string; distroName: string; installLocation: string; versionLabel: string;
   archiveFormat: string; tarFormat: string; vhdFormat: string; vhdRequiresWsl2: string;
   importVhdInPlace: string; importVhdInPlaceHelp: string;
+  installFromFile: string; installFromFileHelp: string; installFromFileWarning: string; wslPackageFile: string;
   moveDistro: string; resizeDisk: string; enableSparse: string; disableSparse: string; moveWarning: string; resizeWarning: string;
   operationSection: string; manageSection: string; pathPlaceholder: string; archivePlaceholder: string; usernamePlaceholder: string;
   noCatalogItems: string; loadCatalog: string;
@@ -100,6 +101,9 @@ const en: MonitorMessages = {
   importDistribution: 'Import distribution', importArchive: 'Import archive', distroName: 'New distribution name', installLocation: 'Installation folder', versionLabel: 'WSL version',
   archiveFormat: 'Archive format', tarFormat: 'TAR archive', vhdFormat: 'VHDX (WSL 2)', vhdRequiresWsl2: 'VHDX import requires WSL 2.',
   importVhdInPlace: 'Register an existing VHDX', importVhdInPlaceHelp: 'The VHDX must use ext4. WSL registers this file directly; it does not copy it.',
+  installFromFile: 'Install a local WSL package', installFromFileHelp: 'Choose a trusted .wsl package, its distribution name, install folder and WSL version. Requires WSL 2.4.4 or later.',
+  installFromFileWarning: 'Only install a package from a publisher you trust. A WSL package can run first-launch setup code with your user permissions.',
+  wslPackageFile: 'Local .wsl package',
   moveDistro: 'Move distribution', resizeDisk: 'Resize virtual disk', enableSparse: 'Enable sparse mode', disableSparse: 'Disable sparse mode',
   moveWarning: 'This moves {distro} to another folder and may take several minutes. Ensure WSL has enough free space at the destination.',
   resizeWarning: 'This stops all WSL distributions before changing the virtual disk size for {distro}.',
@@ -174,6 +178,9 @@ const fr: MonitorMessages = {
   importDistribution: 'Importer une distribution', importArchive: 'Archive à importer', distroName: 'Nom de la nouvelle distribution', installLocation: 'Dossier d’installation', versionLabel: 'Version WSL',
   archiveFormat: 'Format d’archive', tarFormat: 'Archive TAR', vhdFormat: 'VHDX (WSL 2)', vhdRequiresWsl2: 'L’import VHDX nécessite WSL 2.',
   importVhdInPlace: 'Enregistrer un VHDX existant', importVhdInPlaceHelp: 'Le VHDX doit être au format ext4. WSL enregistre ce fichier directement, sans le copier.',
+  installFromFile: 'Installer un paquet WSL local', installFromFileHelp: 'Choisis un paquet .wsl de confiance, son nom de distribution, son dossier d’installation et sa version WSL. Nécessite WSL 2.4.4 ou ultérieur.',
+  installFromFileWarning: 'Installe uniquement un paquet provenant d’un éditeur de confiance. Un paquet WSL peut exécuter du code au premier démarrage avec les droits de ton compte.',
+  wslPackageFile: 'Paquet .wsl local',
   moveDistro: 'Déplacer la distribution', resizeDisk: 'Redimensionner le disque virtuel', enableSparse: 'Activer le mode sparse', disableSparse: 'Désactiver le mode sparse',
   moveWarning: 'Cette opération déplace {distro} vers un autre dossier et peut durer plusieurs minutes. Vérifie l’espace libre à destination.',
   resizeWarning: 'Cette opération arrête toutes les distributions WSL avant de modifier la taille du disque virtuel de {distro}.',
