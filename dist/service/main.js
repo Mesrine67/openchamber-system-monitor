@@ -2297,12 +2297,17 @@ var inspectWslConfig = (text) => {
     "general.instanceidletimeout",
     "boot.systemd",
     "boot.command",
+    "boot.protectbinfmt",
+    "boot.inittimeout",
     "automount.enabled",
     "automount.mountfstab",
     "interop.enabled",
     "interop.appendwindowspath",
     "network.generatehosts",
     "network.generateresolvconf",
+    "gpu.enabled",
+    "gpu.appendlibpath",
+    "time.usewindowstimezone",
     "user.default"
   ]);
   const insights = [...settings].filter(([path]) => visible.has(path)).map(([path, value]) => {

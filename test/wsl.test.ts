@@ -43,6 +43,22 @@ describe('WSL parser', () => {
     ]);
   });
 
+  test('recognizes additional guided settings for WSL networking, GPU, boot and time', () => {
+    const result = inspectWslConfig('[wsl2]\nlocalhostForwarding=true\nvmIdleTimeout=60000\n[experimental]\nautoMemoryReclaim=gradual\n[network]\ngenerateHosts=false\ngenerateResolvConf=false\n[gpu]\nenabled=true\nappendLibPath=true\n[time]\nuseWindowsTimezone=false\n[boot]\nprotectBinfmt=true\ninitTimeout=20000');
+    expect(result.insights).toEqual([
+      { section: 'wsl2', key: 'localhostforwarding', value: 'true' },
+      { section: 'wsl2', key: 'vmidletimeout', value: '60000' },
+      { section: 'experimental', key: 'automemoryreclaim', value: 'gradual' },
+      { section: 'network', key: 'generatehosts', value: 'false' },
+      { section: 'network', key: 'generateresolvconf', value: 'false' },
+      { section: 'gpu', key: 'enabled', value: 'true' },
+      { section: 'gpu', key: 'appendlibpath', value: 'true' },
+      { section: 'time', key: 'usewindowstimezone', value: 'false' },
+      { section: 'boot', key: 'protectbinfmt', value: 'true' },
+      { section: 'boot', key: 'inittimeout', value: '20000' },
+    ]);
+  });
+
   test('parses bounded process and listening-port diagnostics', async () => {
     const fixture = await readFile(new URL('./fixtures/wsl-diagnostics.txt', import.meta.url), 'utf8');
     expect(parseWslDiagnostics(fixture)).toEqual({

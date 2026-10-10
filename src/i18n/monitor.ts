@@ -46,6 +46,10 @@ export type MonitorMessages = {
   configGuided: string; configAdvanced: string; configVmMemory: string; configVmProcessors: string; configVmSwap: string;
   configNetworkingMode: string; configSystemd: string; configAutoMount: string; configMountFstab: string;
   configDnsTunneling: string; configFirewall: string; configAutoProxy: string; configGuiApplications: string; configGpuSupport: string;
+  configLocalhostForwarding: string; configNestedVirtualization: string; configDebugConsole: string; configVmIdleTimeout: string;
+  configSparseVhd: string; configBestEffortDnsParsing: string; configAutoMemoryReclaim: string; configInstanceIdleTimeout: string;
+  configGenerateHosts: string; configGenerateResolvConf: string; configProtectBinfmt: string; configInitTimeout: string;
+  configGpuEnabled: string; configAppendGpuLibPath: string; configUseWindowsTimezone: string;
   configInterop: string; configWindowsPath: string; configNoChange: string;
   runningCount: string; defaultWslVersion: string; setDefaultWslVersion: string; updateWsl: string; updateWslWarning: string; defaultVersionWarning: string;
   searchDistributions: string; stateFilter: string; versionFilter: string; allDistributions: string; runningFilter: string; stoppedFilter: string; noFilteredDistributions: string;
@@ -119,6 +123,10 @@ const en: MonitorMessages = {
   configGuided: 'Guided settings', configAdvanced: 'Advanced configuration text', configVmMemory: 'WSL 2 memory limit (for example 8GB)',
   configVmProcessors: 'WSL 2 logical processors', configVmSwap: 'WSL 2 swap size (for example 4GB)', configNetworkingMode: 'WSL 2 networking mode',
   configDnsTunneling: 'DNS tunneling', configFirewall: 'Windows Firewall integration', configAutoProxy: 'Use Windows proxy settings', configGuiApplications: 'WSLg Linux GUI applications', configGpuSupport: 'GPU support for Linux applications',
+  configLocalhostForwarding: 'Forward localhost ports to Windows', configNestedVirtualization: 'Nested virtualization', configDebugConsole: 'Show WSL kernel debug console', configVmIdleTimeout: 'Shut down idle WSL VM after (ms)',
+  configSparseVhd: 'Use sparse VHDs for newly created disks (experimental)', configBestEffortDnsParsing: 'Best-effort DNS parsing (experimental)', configAutoMemoryReclaim: 'Automatic memory reclaim (experimental)', configInstanceIdleTimeout: 'Shut down idle distributions after (ms; -1 disables)',
+  configGenerateHosts: 'Generate /etc/hosts automatically', configGenerateResolvConf: 'Generate /etc/resolv.conf automatically', configProtectBinfmt: 'Protect systemd binfmt registrations', configInitTimeout: 'Wait for systemd initialization (ms)',
+  configGpuEnabled: 'Allow GPU access in this distribution', configAppendGpuLibPath: 'Add WSL GPU libraries to linker path', configUseWindowsTimezone: 'Use and sync the Windows time zone',
   configSystemd: 'Enable systemd', configAutoMount: 'Automatically mount Windows drives', configMountFstab: 'Process /etc/fstab at startup',
   configInterop: 'Allow launching Windows processes', configWindowsPath: 'Add Windows paths to Linux PATH', configNoChange: 'No change',
   runningCount: '{running} running of {total} distributions', defaultWslVersion: 'Default WSL version', setDefaultWslVersion: 'Set default version to WSL {version}',
@@ -196,6 +204,10 @@ const fr: MonitorMessages = {
   configGuided: 'Réglages guidés', configAdvanced: 'Configuration texte avancée', configVmMemory: 'Limite mémoire WSL 2 (exemple : 8GB)',
   configVmProcessors: 'Nombre de processeurs logiques WSL 2', configVmSwap: 'Taille du swap WSL 2 (exemple : 4GB)', configNetworkingMode: 'Mode réseau WSL 2',
   configDnsTunneling: 'Tunnel DNS', configFirewall: 'Intégration du pare-feu Windows', configAutoProxy: 'Utiliser le proxy Windows', configGuiApplications: 'Applications Linux graphiques via WSLg', configGpuSupport: 'Prise en charge GPU pour les applications Linux',
+  configLocalhostForwarding: 'Transférer les ports localhost vers Windows', configNestedVirtualization: 'Virtualisation imbriquée', configDebugConsole: 'Afficher la console de débogage du noyau WSL', configVmIdleTimeout: 'Arrêter la VM WSL inactive après (ms)',
+  configSparseVhd: 'Créer de nouveaux disques VHD sparse (expérimental)', configBestEffortDnsParsing: 'Analyse DNS tolérante (expérimental)', configAutoMemoryReclaim: 'Récupération automatique de mémoire (expérimental)', configInstanceIdleTimeout: 'Arrêter les distributions inactives après (ms ; -1 désactive)',
+  configGenerateHosts: 'Générer automatiquement /etc/hosts', configGenerateResolvConf: 'Générer automatiquement /etc/resolv.conf', configProtectBinfmt: 'Protéger les enregistrements binfmt de systemd', configInitTimeout: 'Attendre l’initialisation de systemd (ms)',
+  configGpuEnabled: 'Autoriser le GPU dans cette distribution', configAppendGpuLibPath: 'Ajouter les bibliothèques GPU WSL au chemin de liaison', configUseWindowsTimezone: 'Utiliser et synchroniser le fuseau horaire Windows',
   configSystemd: 'Activer systemd', configAutoMount: 'Monter automatiquement les lecteurs Windows', configMountFstab: 'Traiter /etc/fstab au démarrage',
   configInterop: 'Autoriser le lancement des processus Windows', configWindowsPath: 'Ajouter les chemins Windows au PATH Linux', configNoChange: 'Ne pas modifier',
   runningCount: '{running} en cours sur {total} distributions', defaultWslVersion: 'Version WSL par défaut', setDefaultWslVersion: 'Définir la version par défaut sur WSL {version}',

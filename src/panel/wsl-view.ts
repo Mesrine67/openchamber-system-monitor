@@ -487,13 +487,28 @@ export const renderWslView = (options: WslPanelOptions): HTMLElement => {
         { section: 'wsl2', key: 'autoProxy', label: options.tm.configAutoProxy, kind: 'boolean' as const },
         { section: 'wsl2', key: 'guiApplications', label: options.tm.configGuiApplications, kind: 'boolean' as const },
         { section: 'wsl2', key: 'gpuSupport', label: options.tm.configGpuSupport, kind: 'boolean' as const },
+        { section: 'wsl2', key: 'localhostForwarding', label: options.tm.configLocalhostForwarding, kind: 'boolean' as const },
+        { section: 'wsl2', key: 'nestedVirtualization', label: options.tm.configNestedVirtualization, kind: 'boolean' as const },
+        { section: 'wsl2', key: 'debugConsole', label: options.tm.configDebugConsole, kind: 'boolean' as const },
+        { section: 'wsl2', key: 'vmIdleTimeout', label: options.tm.configVmIdleTimeout, kind: 'text' as const },
+        { section: 'experimental', key: 'sparseVhd', label: options.tm.configSparseVhd, kind: 'boolean' as const },
+        { section: 'experimental', key: 'bestEffortDnsParsing', label: options.tm.configBestEffortDnsParsing, kind: 'boolean' as const },
+        { section: 'experimental', key: 'autoMemoryReclaim', label: options.tm.configAutoMemoryReclaim, kind: 'select' as const, choices: ['', 'disabled', 'gradual', 'dropCache'] },
+        { section: 'general', key: 'instanceIdleTimeout', label: options.tm.configInstanceIdleTimeout, kind: 'text' as const },
       ]
       : [
         { section: 'boot', key: 'systemd', label: options.tm.configSystemd, kind: 'boolean' as const },
+        { section: 'boot', key: 'protectBinfmt', label: options.tm.configProtectBinfmt, kind: 'boolean' as const },
+        { section: 'boot', key: 'initTimeout', label: options.tm.configInitTimeout, kind: 'text' as const },
         { section: 'automount', key: 'enabled', label: options.tm.configAutoMount, kind: 'boolean' as const },
         { section: 'automount', key: 'mountFstab', label: options.tm.configMountFstab, kind: 'boolean' as const },
         { section: 'interop', key: 'enabled', label: options.tm.configInterop, kind: 'boolean' as const },
         { section: 'interop', key: 'appendWindowsPath', label: options.tm.configWindowsPath, kind: 'boolean' as const },
+        { section: 'network', key: 'generateHosts', label: options.tm.configGenerateHosts, kind: 'boolean' as const },
+        { section: 'network', key: 'generateResolvConf', label: options.tm.configGenerateResolvConf, kind: 'boolean' as const },
+        { section: 'gpu', key: 'enabled', label: options.tm.configGpuEnabled, kind: 'boolean' as const },
+        { section: 'gpu', key: 'appendLibPath', label: options.tm.configAppendGpuLibPath, kind: 'boolean' as const },
+        { section: 'time', key: 'useWindowsTimezone', label: options.tm.configUseWindowsTimezone, kind: 'boolean' as const },
       ];
     const guidedBody = element('div', 'wsl-fields');
     for (const setting of settings) {
