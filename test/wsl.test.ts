@@ -44,7 +44,7 @@ describe('WSL parser', () => {
   });
 
   test('recognizes additional guided settings for WSL networking, GPU, boot and time', () => {
-    const result = inspectWslConfig('[wsl2]\nlocalhostForwarding=true\nvmIdleTimeout=60000\ndefaultVhdSize=1TB\ndnsProxy=false\nhostAddressLoopback=true\nignoredPorts=53,3000\n[experimental]\nautoMemoryReclaim=gradual\n[network]\ngenerateHosts=false\ngenerateResolvConf=false\nhostname=devbox\n[gpu]\nenabled=true\nappendLibPath=true\n[time]\nuseWindowsTimezone=false\n[automount]\nroot=/mnt\noptions=metadata,uid=1000\ncgroups=v2\n[boot]\nprotectBinfmt=true\ninitTimeout=20000');
+    const result = inspectWslConfig('[wsl2]\nlocalhostForwarding=true\nvmIdleTimeout=60000\ndefaultVhdSize=1TB\ndnsProxy=false\nhostAddressLoopback=true\nignoredPorts=53,3000\nsafeMode=true\nmaxCrashDumpCount=4\n[experimental]\nautoMemoryReclaim=gradual\n[network]\ngenerateHosts=false\ngenerateResolvConf=false\nhostname=devbox\n[gpu]\nenabled=true\nappendLibPath=true\n[time]\nuseWindowsTimezone=false\n[automount]\nroot=/mnt\noptions=metadata,uid=1000\ncgroups=v2\nldconfig=true\n[boot]\nprotectBinfmt=true\ninitTimeout=20000');
     expect(result.insights).toEqual([
       { section: 'wsl2', key: 'localhostforwarding', value: 'true' },
       { section: 'wsl2', key: 'vmidletimeout', value: '60000' },
@@ -52,6 +52,8 @@ describe('WSL parser', () => {
       { section: 'wsl2', key: 'dnsproxy', value: 'false' },
       { section: 'wsl2', key: 'hostaddressloopback', value: 'true' },
       { section: 'wsl2', key: 'ignoredports', value: '53,3000' },
+      { section: 'wsl2', key: 'safemode', value: 'true' },
+      { section: 'wsl2', key: 'maxcrashdumpcount', value: '4' },
       { section: 'experimental', key: 'automemoryreclaim', value: 'gradual' },
       { section: 'network', key: 'generatehosts', value: 'false' },
       { section: 'network', key: 'generateresolvconf', value: 'false' },
@@ -62,6 +64,7 @@ describe('WSL parser', () => {
       { section: 'automount', key: 'root', value: '/mnt' },
       { section: 'automount', key: 'options', value: 'metadata,uid=1000' },
       { section: 'automount', key: 'cgroups', value: 'v2' },
+      { section: 'automount', key: 'ldconfig', value: 'true' },
       { section: 'boot', key: 'protectbinfmt', value: 'true' },
       { section: 'boot', key: 'inittimeout', value: '20000' },
     ]);

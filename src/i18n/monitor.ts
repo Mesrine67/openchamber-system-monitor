@@ -49,6 +49,7 @@ export type MonitorMessages = {
   configLocalhostForwarding: string; configNestedVirtualization: string; configDebugConsole: string; configVmIdleTimeout: string;
   configSparseVhd: string; configBestEffortDnsParsing: string; configAutoMemoryReclaim: string; configInstanceIdleTimeout: string;
   configDefaultVhdSize: string; configDnsProxy: string; configHostAddressLoopback: string; configIgnoredPorts: string;
+  configSafeMode: string; configMaxCrashDumps: string; configAutomountLdconfig: string;
   configGenerateHosts: string; configGenerateResolvConf: string; configProtectBinfmt: string; configInitTimeout: string;
   configGpuEnabled: string; configAppendGpuLibPath: string; configUseWindowsTimezone: string;
   configAutomountRoot: string; configAutomountOptions: string; configCgroups: string; configDistroHostname: string;
@@ -128,6 +129,7 @@ const en: MonitorMessages = {
   configLocalhostForwarding: 'Forward localhost ports to Windows', configNestedVirtualization: 'Nested virtualization', configDebugConsole: 'Show WSL kernel debug console', configVmIdleTimeout: 'Shut down idle WSL VM after (ms)',
   configSparseVhd: 'Use sparse VHDs for newly created disks (experimental)', configBestEffortDnsParsing: 'Best-effort DNS parsing (experimental)', configAutoMemoryReclaim: 'Automatic memory reclaim (experimental)', configInstanceIdleTimeout: 'Shut down idle distributions after (ms; -1 disables)',
   configDefaultVhdSize: 'Maximum size for new distro disks (for example 1TB)', configDnsProxy: 'Use the Windows DNS proxy (NAT mode)', configHostAddressLoopback: 'Allow host IPv4 address loopback (mirrored mode)', configIgnoredPorts: 'Ports Linux may bind despite Windows listeners (mirrored mode; comma-separated)',
+  configSafeMode: 'Start WSL in recovery safe mode (Windows 11, supported WSL versions)', configMaxCrashDumps: 'Maximum WSL crash dumps to retain', configAutomountLdconfig: 'Add Windows GPU libraries to the Linux linker cache',
   configGenerateHosts: 'Generate /etc/hosts automatically', configGenerateResolvConf: 'Generate /etc/resolv.conf automatically', configProtectBinfmt: 'Protect systemd binfmt registrations', configInitTimeout: 'Wait for systemd initialization (ms)',
   configGpuEnabled: 'Allow GPU access in this distribution', configAppendGpuLibPath: 'Add WSL GPU libraries to linker path', configUseWindowsTimezone: 'Use and sync the Windows time zone',
   configAutomountRoot: 'Mount Windows drives under this Linux directory', configAutomountOptions: 'DrvFs options for automatically mounted drives', configCgroups: 'Cgroup hierarchy', configDistroHostname: 'Linux distribution hostname',
@@ -211,6 +213,7 @@ const fr: MonitorMessages = {
   configLocalhostForwarding: 'Transférer les ports localhost vers Windows', configNestedVirtualization: 'Virtualisation imbriquée', configDebugConsole: 'Afficher la console de débogage du noyau WSL', configVmIdleTimeout: 'Arrêter la VM WSL inactive après (ms)',
   configSparseVhd: 'Créer de nouveaux disques VHD sparse (expérimental)', configBestEffortDnsParsing: 'Analyse DNS tolérante (expérimental)', configAutoMemoryReclaim: 'Récupération automatique de mémoire (expérimental)', configInstanceIdleTimeout: 'Arrêter les distributions inactives après (ms ; -1 désactive)',
   configDefaultVhdSize: 'Taille maximale des nouveaux disques de distribution (exemple : 1TB)', configDnsProxy: 'Utiliser le proxy DNS Windows (mode NAT)', configHostAddressLoopback: 'Autoriser la boucle vers les adresses IPv4 de l’hôte (mode mirrored)', configIgnoredPorts: 'Ports que Linux peut utiliser malgré Windows (mode mirrored ; séparés par des virgules)',
+  configSafeMode: 'Démarrer WSL en mode de récupération (Windows 11 et version WSL compatible)', configMaxCrashDumps: 'Nombre maximal de dumps WSL à conserver', configAutomountLdconfig: 'Ajouter les bibliothèques GPU Windows au cache de liens Linux',
   configGenerateHosts: 'Générer automatiquement /etc/hosts', configGenerateResolvConf: 'Générer automatiquement /etc/resolv.conf', configProtectBinfmt: 'Protéger les enregistrements binfmt de systemd', configInitTimeout: 'Attendre l’initialisation de systemd (ms)',
   configGpuEnabled: 'Autoriser le GPU dans cette distribution', configAppendGpuLibPath: 'Ajouter les bibliothèques GPU WSL au chemin de liaison', configUseWindowsTimezone: 'Utiliser et synchroniser le fuseau horaire Windows',
   configAutomountRoot: 'Monter les lecteurs Windows sous ce dossier Linux', configAutomountOptions: 'Options DrvFs des lecteurs montés automatiquement', configCgroups: 'Hiérarchie cgroups', configDistroHostname: 'Nom d’hôte de la distribution Linux',
