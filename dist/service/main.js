@@ -515,14 +515,14 @@ var createCpuMemCollector = (platform, container, now) => {
         const [vm, swapUsage] = await Promise.all([run(["/usr/bin/vm_stat", "vm_stat"], []), readSwap()]);
         if (!vm.ok)
           return unavailable(vm.missing ? "tool-missing" : "failed", "vm_stat");
-        const used2 = parseVmStat(vm.stdout);
-        if (used2 === null)
+        const used = parseVmStat(vm.stdout);
+        if (used === null)
           return unavailable("failed");
         return {
           status: "ok",
-          used: used2,
+          used,
           total: os.totalmem(),
-          available: Math.max(0, os.totalmem() - used2),
+          available: Math.max(0, os.totalmem() - used),
           cached: null,
           committed: null,
           commitLimit: null,
@@ -657,10 +657,10 @@ var linuxBattery = async () => {
   let acOnline = null;
   const candidates = [];
   for (const device of devices.slice(0, 64)) {
-    const path2 = `/sys/class/power_supply/${device}`;
-    const [type, online] = await Promise.all([readText(`${path2}/type`), readText(`${path2}/online`)]);
+    const path = `/sys/class/power_supply/${device}`;
+    const [type, online] = await Promise.all([readText(`${path}/type`), readText(`${path}/online`)]);
     if (type?.trim() === "Battery")
-      candidates.push(path2);
+      candidates.push(path);
     if (online?.trim() === "1" || online?.trim() === "0")
       acOnline = online.trim();
   }
@@ -995,8 +995,8 @@ var readDisks = async (platform, container) => {
 
 // src/service/collectors/parse-disk-activity.ts
 var nonNegative = (value) => {
-  const number2 = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
-  return Number.isFinite(number2) && number2 >= 0 ? number2 : null;
+  const number = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(number) && number >= 0 ? number : null;
 };
 var parseProcDiskStats = (text) => text.split(/\r?\n/).flatMap((line) => {
   const fields = line.trim().split(/\s+/);
@@ -1340,8 +1340,8 @@ var createGpuCollector = (platform) => {
 
 // src/service/collectors/parse-network.ts
 var byteCount = (value) => {
-  const number2 = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
-  return Number.isSafeInteger(number2) && number2 >= 0 ? number2 : null;
+  const number = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isSafeInteger(number) && number >= 0 ? number : null;
 };
 var linkSpeed = (value) => {
   if (typeof value === "number")
@@ -1397,8 +1397,8 @@ var parseDarwinNetstat = (text) => {
   for (const line of text.split(/\r?\n/)) {
     const fields = line.trim().split(/\s+/);
     if (fields[0] === "Name") {
-      receivedIndex = fields.findIndex((field2) => field2.toLowerCase() === "ibytes");
-      sentIndex = fields.findIndex((field2) => field2.toLowerCase() === "obytes");
+      receivedIndex = fields.findIndex((field) => field.toLowerCase() === "ibytes");
+      sentIndex = fields.findIndex((field) => field.toLowerCase() === "obytes");
       continue;
     }
     if (receivedIndex < 0 || sentIndex < 0 || fields.length <= Math.max(receivedIndex, sentIndex))
@@ -1499,8 +1499,8 @@ import { readdir as readdir4 } from "node:fs/promises";
 
 // src/service/collectors/parse-processes.ts
 var safeNumber = (value) => {
-  const number2 = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
-  return Number.isFinite(number2) && number2 >= 0 ? number2 : null;
+  const number = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(number) && number >= 0 ? number : null;
 };
 var safeName = (value) => {
   if (typeof value !== "string")
@@ -1806,13 +1806,13 @@ var detectContainer = async (platform) => {
 import os4 from "node:os";
 
 // src/service/warnings.ts
-var sustainedHigh = (history, threshold2 = WARN_PERCENT, seconds = 60) => {
+var sustainedHigh = (history, threshold = WARN_PERCENT, seconds = 60) => {
   const required = Math.max(1, Math.ceil(seconds * 1000 / SAMPLE_INTERVAL_MS));
   if (history.length < required)
     return false;
-  return history.slice(-required).every((value) => value !== null && value >= threshold2);
+  return history.slice(-required).every((value) => value !== null && value >= threshold);
 };
-var levelAt = (percent2, warning, critical) => percent2 >= critical ? "critical" : percent2 >= warning ? "warn" : null;
+var levelAt = (percent, warning, critical) => percent >= critical ? "critical" : percent >= warning ? "warn" : null;
 var evaluateWarnings = (input, settings = DEFAULT_MONITOR_SETTINGS) => {
   const warnings = [];
   const thresholds = settings.thresholds;
@@ -1840,10 +1840,10 @@ var evaluateWarnings = (input, settings = DEFAULT_MONITOR_SETTINGS) => {
   }
   if (input.disks.status === "ok") {
     for (const disk of input.disks.items) {
-      const percent2 = diskPercent(disk);
-      if (percent2 === null)
+      const percent = diskPercent(disk);
+      if (percent === null)
         continue;
-      const level = levelAt(percent2, thresholds.diskWarning, thresholds.diskCritical);
+      const level = levelAt(percent, thresholds.diskWarning, thresholds.diskCritical);
       if (level)
         warnings.push({ kind: "disk", target: disk.mount, level });
     }
@@ -2643,12 +2643,12 @@ var parseWslDistroDetails = (input) => {
     const end = content.search(/\n__/);
     return end < 0 ? content : content.slice(0, end);
   };
-  const os5 = new Map;
+  const os = new Map;
   for (const line of marker("OS").split(`
 `)) {
     const match = line.match(/^([A-Z_]+)=(.*)$/);
     if (match?.[1])
-      os5.set(match[1], (match[2] ?? "").replace(/^"|"$/g, ""));
+      os.set(match[1], (match[2] ?? "").replace(/^"|"$/g, ""));
   }
   const memory = marker("MEM").match(/^Mem:\s+(\d+)\s+(\d+)\s+(\d+)/m);
   const disk = marker("DISK").match(/^\S+\s+(\d+)\s+(\d+)\s+(\d+)/m);
@@ -2664,8 +2664,8 @@ var parseWslDistroDetails = (input) => {
   const remoteDesktopPortValue = Number(text.match(/(?:^|\n)__XRDP__=(\d{1,5})(?:\n|$)/)?.[1]);
   const remoteDesktopPort = Number.isInteger(remoteDesktopPortValue) && remoteDesktopPortValue >= 1 && remoteDesktopPortValue <= 65535 ? remoteDesktopPortValue : null;
   return {
-    osName: os5.get("PRETTY_NAME") ?? os5.get("NAME") ?? null,
-    osVersion: os5.get("VERSION_ID") ?? null,
+    osName: os.get("PRETTY_NAME") ?? os.get("NAME") ?? null,
+    osVersion: os.get("VERSION_ID") ?? null,
     kernel,
     memoryUsedBytes: finiteBytes(memory?.[2]),
     memoryTotalBytes: finiteBytes(memory?.[1]),
@@ -2687,13 +2687,13 @@ var parseWslRegistrationMetadata = (input) => {
     for (const item of entries) {
       if (typeof item !== "object" || item === null || Array.isArray(item))
         continue;
-      const row2 = item;
-      if (typeof row2.Name !== "string" || !row2.Name.trim() || row2.Name.length > 128)
+      const row = item;
+      if (typeof row.Name !== "string" || !row.Name.trim() || row.Name.length > 128)
         continue;
-      const bytes = typeof row2.VirtualDiskBytes === "number" && Number.isSafeInteger(row2.VirtualDiskBytes) && row2.VirtualDiskBytes >= 0 ? row2.VirtualDiskBytes : null;
+      const bytes = typeof row.VirtualDiskBytes === "number" && Number.isSafeInteger(row.VirtualDiskBytes) && row.VirtualDiskBytes >= 0 ? row.VirtualDiskBytes : null;
       result.push({
-        name: row2.Name,
-        source: row2.Source === "store" || row2.Source === "imported" ? row2.Source : "unknown",
+        name: row.Name,
+        source: row.Source === "store" || row.Source === "imported" ? row.Source : "unknown",
         virtualDiskBytes: bytes
       });
     }
@@ -2781,8 +2781,8 @@ var runWsl = (args, timeoutMs = 15000) => new Promise((resolve) => {
       resolve({ ok: true, stdout: output });
       return;
     }
-    const missing2 = "code" in error && error.code === "ENOENT";
-    resolve({ ok: false, missing: missing2, error: cleanError(decodeWslText(stderr ?? "") || output || error.message) });
+    const missing = "code" in error && error.code === "ENOENT";
+    resolve({ ok: false, missing, error: cleanError(decodeWslText(stderr ?? "") || output || error.message) });
   });
 });
 var unavailable2 = (reason, error) => ({
@@ -2822,8 +2822,8 @@ var readRegistrationMetadata = async () => {
   const result = await runPowerShell(distroMetadataScript, 12000);
   const items = new Map;
   if (result.ok) {
-    for (const row2 of parseWslRegistrationMetadata(result.stdout)) {
-      items.set(row2.name.toLocaleLowerCase(), { source: row2.source, virtualDiskBytes: row2.virtualDiskBytes });
+    for (const row of parseWslRegistrationMetadata(result.stdout)) {
+      items.set(row.name.toLocaleLowerCase(), { source: row.source, virtualDiskBytes: row.virtualDiskBytes });
     }
   }
   metadataCache = { expiresAt: Date.now() + 5 * 60000, items };
@@ -2836,8 +2836,8 @@ var enrichDistro = async (distro) => {
   const cacheKey = distro.name.toLocaleLowerCase();
   const cached = detailsCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
-    const { memoryUsedBytes: memoryUsedBytes2, memoryTotalBytes: memoryTotalBytes2, ...details2 } = cached.details;
-    return { distribution: { ...distro, ...details2 }, memoryUsedBytes: memoryUsedBytes2, memoryTotalBytes: memoryTotalBytes2 };
+    const { memoryUsedBytes, memoryTotalBytes, ...details } = cached.details;
+    return { distribution: { ...distro, ...details }, memoryUsedBytes, memoryTotalBytes };
   }
   const probe = [
     'printf "__OS__\\n"; cat /etc/os-release 2>/dev/null || true',
@@ -3070,45 +3070,45 @@ var runWslAction = async (action) => {
     return { ok: false, message: "Cette action nécessite le service OpenChamber sur Windows." };
   if ("distro" in action && !knownName(action.distro))
     return { ok: false, message: "Nom de distribution invalide." };
-  const run2 = (args, timeout = 30000) => runWsl(args, timeout);
+  const run = (args, timeout = 30000) => runWsl(args, timeout);
   switch (action.action) {
     case "start": {
       const result = await openDistroTerminal(action.distro);
       return result.ok ? success(`${action.distro} démarrée dans Windows Terminal.`) : result;
     }
     case "stop": {
-      const result = await run2(["--terminate", action.distro]);
+      const result = await run(["--terminate", action.distro]);
       return result.ok ? success(`${action.distro} arrêtée.`) : failed(result);
     }
     case "restart": {
-      const stop = await run2(["--terminate", action.distro]);
+      const stop = await run(["--terminate", action.distro]);
       if (!stop.ok)
         return failed(stop);
       const start = await openDistroTerminal(action.distro);
       return start.ok ? success(`${action.distro} redémarrée dans Windows Terminal.`) : start;
     }
     case "set-default": {
-      const result = await run2(["--set-default", action.distro]);
+      const result = await run(["--set-default", action.distro]);
       return result.ok ? success(`${action.distro} est la distribution par défaut.`) : failed(result);
     }
     case "set-default-version": {
-      const result = await run2(["--set-default-version", String(action.version)]);
+      const result = await run(["--set-default-version", String(action.version)]);
       return result.ok ? success(`WSL ${action.version} sera la version utilisée pour les nouvelles distributions.`) : failed(result);
     }
     case "update-wsl": {
-      const result = await run2(["--update", "--web-download"], 900000);
+      const result = await run(["--update", "--web-download"], 900000);
       return result.ok ? success("La mise à jour de WSL est terminée. Redémarre WSL si Windows le demande.") : failed(result);
     }
     case "set-version": {
-      const result = await run2(["--set-version", action.distro, String(action.version)], 600000);
+      const result = await run(["--set-version", action.distro, String(action.version)], 600000);
       return result.ok ? success(`${action.distro} convertie en WSL ${action.version}.`) : failed(result);
     }
     case "set-default-user": {
       const target = ["--distribution", action.distro, "--user", "root", "--exec"];
-      const userCheck = await run2([...target, "id", "-u", action.username]);
+      const userCheck = await run([...target, "id", "-u", action.username]);
       if (!userCheck.ok)
         return failed(userCheck);
-      const readConfig = await run2([...target, "sh", "-c", "if [ -f /etc/wsl.conf ]; then cat /etc/wsl.conf; fi"]);
+      const readConfig = await run([...target, "sh", "-c", "if [ -f /etc/wsl.conf ]; then cat /etc/wsl.conf; fi"]);
       if (!readConfig.ok)
         return failed(readConfig);
       if (Buffer.byteLength(readConfig.stdout, "utf8") > 24 * 1024) {
@@ -3122,11 +3122,11 @@ printf '%s' "$1" | base64 -d > "$temporary"
 chmod 600 "$temporary"
 mv -f "$temporary" /etc/wsl.conf
 trap - EXIT`;
-      const result = await run2([...target, "sh", "-c", writeConfig, "sh", encodedConfig]);
+      const result = await run([...target, "sh", "-c", writeConfig, "sh", encodedConfig]);
       return result.ok ? success(`Utilisateur par défaut configuré pour ${action.distro}. Redémarre la distribution pour appliquer le changement.`) : failed(result);
     }
     case "install": {
-      const result = await run2(["--install", "--distribution", action.distro, "--no-launch"], 900000);
+      const result = await run(["--install", "--distribution", action.distro, "--no-launch"], 900000);
       return result.ok ? success(`${action.distro} installée.`) : failed(result);
     }
     case "install-from-file": {
@@ -3135,7 +3135,7 @@ trap - EXIT`;
         return { ok: false, message: "Le paquet WSL est introuvable ou n’est pas un fichier." };
       if (await pathExists(action.location))
         return { ok: false, message: "Le dossier d’installation existe déjà. Choisis un nouveau dossier." };
-      const result = await run2([
+      const result = await run([
         "--install",
         "--from-file",
         action.file,
@@ -3152,7 +3152,7 @@ trap - EXIT`;
     case "export": {
       if (await pathExists(action.file))
         return { ok: false, message: "Le fichier cible existe déjà. Choisis un nouveau chemin pour ne pas l’écraser." };
-      const result = await run2(action.format === "vhd" ? ["--export", action.distro, action.file, "--vhd"] : ["--export", action.distro, action.file], 900000);
+      const result = await run(action.format === "vhd" ? ["--export", action.distro, action.file, "--vhd"] : ["--export", action.distro, action.file], 900000);
       return result.ok ? success(`Archive exportée vers ${action.file}.`) : failed(result);
     }
     case "import": {
@@ -3164,14 +3164,14 @@ trap - EXIT`;
       const args = ["--import", action.distro, action.location, action.file, "--version", String(action.version)];
       if (action.format === "vhd")
         args.push("--vhd");
-      const result = await run2(args, 900000);
+      const result = await run(args, 900000);
       return result.ok ? success(`${action.distro} importée.`) : failed(result);
     }
     case "import-in-place": {
       const source = await lstat(action.file).then((stat) => stat.isFile()).catch(() => false);
       if (!source)
         return { ok: false, message: "Le fichier VHDX est introuvable ou n’est pas un fichier." };
-      const result = await run2(["--import-in-place", action.distro, action.file], 900000);
+      const result = await run(["--import-in-place", action.distro, action.file], 900000);
       return result.ok ? success(`${action.distro} enregistrée depuis le disque VHDX.`) : failed(result);
     }
     case "clone": {
@@ -3187,7 +3187,7 @@ trap - EXIT`;
       const copied = await createWslCopy(action.distro, action.newDistro, action.location, action.version);
       if (!copied.ok)
         return copied;
-      const unregister = await run2(["--unregister", action.distro], 120000);
+      const unregister = await run(["--unregister", action.distro], 120000);
       if (!unregister.ok) {
         return { ok: false, message: `${action.newDistro} a été créée, mais ${action.distro} n’a pas pu être désinscrite. Les deux distributions restent disponibles. ${unregister.error}` };
       }
@@ -3196,40 +3196,40 @@ trap - EXIT`;
     case "move": {
       if (await pathExists(action.location))
         return { ok: false, message: "Le dossier de destination existe déjà. Choisis un nouveau dossier." };
-      const result = await run2(["--manage", action.distro, "--move", action.location], 900000);
+      const result = await run(["--manage", action.distro, "--move", action.location], 900000);
       return result.ok ? success(`${action.distro} déplacée.`) : failed(result);
     }
     case "resize": {
-      const shutdown = await run2(["--shutdown"], 120000);
+      const shutdown = await run(["--shutdown"], 120000);
       if (!shutdown.ok)
         return failed(shutdown);
-      const result = await run2(["--manage", action.distro, "--resize", action.size], 600000);
+      const result = await run(["--manage", action.distro, "--resize", action.size], 600000);
       return result.ok ? success(`${action.distro} redimensionnée. Les distributions WSL ont été arrêtées.`) : failed(result);
     }
     case "compact": {
-      const trim = await run2(["--distribution", action.distro, "--user", "root", "--exec", "fstrim", "-av"], 120000);
+      const trim = await run(["--distribution", action.distro, "--user", "root", "--exec", "fstrim", "-av"], 120000);
       if (!trim.ok)
         return { ok: false, message: `Impossible de libérer les blocs inutilisés avant la compaction : ${trim.error}` };
-      const shutdown = await run2(["--shutdown"], 120000);
+      const shutdown = await run(["--shutdown"], 120000);
       if (!shutdown.ok)
         return failed(shutdown);
-      const result = await run2(["--manage", action.distro, "--compact"], 600000);
+      const result = await run(["--manage", action.distro, "--compact"], 600000);
       return result.ok ? success(`${action.distro} compactée. Les distributions WSL ont été arrêtées.`) : failed(result);
     }
     case "set-sparse": {
-      const result = await run2(["--manage", action.distro, "--set-sparse", String(action.enabled)]);
+      const result = await run(["--manage", action.distro, "--set-sparse", String(action.enabled)]);
       return result.ok ? success(`Mode sparse ${action.enabled ? "activé" : "désactivé"} pour ${action.distro}.`) : failed(result);
     }
     case "shutdown": {
-      const result = await run2(["--shutdown"], 120000);
+      const result = await run(["--shutdown"], 120000);
       return result.ok ? success("Toutes les distributions WSL ont été arrêtées.") : failed(result);
     }
     case "force-shutdown": {
-      const result = await run2(["--shutdown", "--force"], 120000);
+      const result = await run(["--shutdown", "--force"], 120000);
       return result.ok ? success("Arrêt forcé de WSL terminé.") : failed(result);
     }
     case "unregister": {
-      const result = await run2(["--unregister", action.distro], 120000);
+      const result = await run(["--unregister", action.distro], 120000);
       return result.ok ? success(`${action.distro} désinscrite et données de distribution supprimées.`) : failed(result);
     }
     case "open-terminal":
@@ -3239,7 +3239,7 @@ trap - EXIT`;
     case "open-vscode":
       return launchDetached("code.exe", ["--remote", `wsl+${action.distro}`, "/home"]);
     case "open-rdp": {
-      const portResult = await run2(["--distribution", action.distro, "--exec", "sh", "-c", distroPortProbe], 1e4);
+      const portResult = await run(["--distribution", action.distro, "--exec", "sh", "-c", distroPortProbe], 1e4);
       if (!portResult.ok)
         return failed(portResult);
       const port = Number(portResult.stdout.trim().split(`
@@ -3300,20 +3300,20 @@ var send = (res, status, body) => {
 var readJsonBody = (req) => new Promise((resolve) => {
   const chunks = [];
   let size = 0;
-  let failed2 = false;
+  let failed = false;
   req.on("data", (chunk) => {
-    if (failed2)
+    if (failed)
       return;
     size += chunk.length;
     if (size > 32768) {
-      failed2 = true;
+      failed = true;
       resolve(null);
       return;
     }
     chunks.push(chunk);
   });
   req.on("end", () => {
-    if (failed2)
+    if (failed)
       return;
     try {
       resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
@@ -3398,7 +3398,7 @@ var server = http.createServer((req, res) => {
         return;
       }
       pruneWslJobs();
-      if ([...wslJobs.values()].filter((job2) => job2.state === "running").length >= 3) {
+      if ([...wslJobs.values()].filter((job) => job.state === "running").length >= 3) {
         send(res, 429, { ok: false, message: "Trop d’opérations WSL sont déjà en cours." });
         return;
       }
