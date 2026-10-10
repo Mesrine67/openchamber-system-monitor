@@ -1,0 +1,30 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "openchamber-system-tools",
+  "version": "0.1.0",
+  "description": "Local-first workflows for diagnosing OpenChamber System Monitor and safely inspecting Windows and WSL systems.",
+  "author": {
+    "name": "Mesrine67",
+    "url": "https://github.com/Mesrine67"
+  },
+  "homepage": "https://github.com/Mesrine67/openchamber-system-monitor",
+  "repository": "https://github.com/Mesrine67/openchamber-system-monitor",
+  "license": "MIT",
+  "keywords": ["openchamber", "system-monitor", "windows", "wsl", "diagnostics"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "OpenChamber System Tools",
+        "shortDescription": "Diagnose OpenChamber System Monitor and inspect Windows/WSL safely.",
+        "longDescription": "Local-first diagnostic workflows for OpenChamber System Monitor, Windows, and WSL. The plugin uses the active host's available tools and does not install a remote service or collect telemetry.",
+        "developerName": "Mesrine67",
+        "category": "Productivity",
+        "websiteURL": "https://github.com/Mesrine67/openchamber-system-monitor",
+        "defaultPrompt": [
+          "Use OpenChamber System Tools to diagnose my System Monitor extension.",
+          "Use OpenChamber System Tools to inspect my Windows and WSL setup."
+        ]
+      }
+    }
+  }
+}
