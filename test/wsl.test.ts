@@ -184,6 +184,12 @@ describe('WSL parser', () => {
     expect(parseWslAction({ action: 'export', distro: 'Ubuntu', file: 'C:\\' })).toBeNull();
     expect(parseWslAction({ action: 'export', distro: 'Ubuntu', file: 'C:\\safe\\archive.tar:stream' })).toBeNull();
     expect(parseWslAction({ action: 'export', distro: 'Ubuntu', file: 'C:\\safe\\CON.txt' })).toBeNull();
+    expect(parseWslAction({ action: 'export', distro: 'Ubuntu', file: 'D:\\Backups\\Ubuntu.vhdx', format: 'vhd' }))
+      .toEqual({ action: 'export', distro: 'Ubuntu', file: 'D:\\Backups\\Ubuntu.vhdx', format: 'vhd' });
+    expect(parseWslAction({ action: 'export', distro: 'Ubuntu', file: 'D:\\Backups\\Ubuntu.tar', format: 'zip' })).toBeNull();
+    expect(parseWslAction({ action: 'import', distro: 'UbuntuCopy', location: 'D:\\WSL\\UbuntuCopy', file: 'D:\\Backups\\Ubuntu.vhdx', version: 1, format: 'vhd' })).toBeNull();
+    expect(parseWslAction({ action: 'import', distro: 'UbuntuCopy', location: 'D:\\WSL\\UbuntuCopy', file: 'D:\\Backups\\Ubuntu.vhdx', version: 2, format: 'vhd' }))
+      .toEqual({ action: 'import', distro: 'UbuntuCopy', location: 'D:\\WSL\\UbuntuCopy', file: 'D:\\Backups\\Ubuntu.vhdx', version: 2, format: 'vhd' });
     expect(parseWslAction({ action: 'unregister', distro: 'Ubuntu', confirmation: 'yes' })).toBeNull();
     expect(parseWslAction({ action: 'compact', distro: 'Ubuntu', confirmation: 'Ubuntu' })).toBeNull();
     expect(parseWslAction({ action: 'compact', distro: 'Ubuntu', confirmation: 'COMPACT Ubuntu' }))

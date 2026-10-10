@@ -47,8 +47,8 @@ export type WslAction =
   | { action: 'set-version'; distro: string; version: 1 | 2; confirmation: string }
   | { action: 'set-default-user'; distro: string; username: string; confirmation: string }
   | { action: 'install'; distro: string }
-  | { action: 'export'; distro: string; file: string }
-  | { action: 'import'; distro: string; location: string; file: string; version: 1 | 2 }
+  | { action: 'export'; distro: string; file: string; format: 'tar' | 'vhd' }
+  | { action: 'import'; distro: string; location: string; file: string; version: 1 | 2; format: 'tar' | 'vhd' }
   | { action: 'clone'; distro: string; newDistro: string; location: string; version: 1 | 2; confirmation: string }
   | { action: 'rename'; distro: string; newDistro: string; location: string; version: 1 | 2; confirmation: string }
   | { action: 'move'; distro: string; location: string; confirmation: string }
@@ -201,10 +201,12 @@ export const parseWslAction = (value: unknown): WslAction | null => {
     case 'install':
       return isDistro ? { action: 'install', distro } : null;
     case 'export':
-      return isDistro && safeWindowsPath(value.file) ? { action: 'export', distro, file: value.file } : null;
+      return isDistro && safeWindowsPath(value.file) && (value.format === 'tar' || value.format === 'vhd')
+        ? { action: 'export', distro, file: value.file, format: value.format } : null;
     case 'import':
       return isDistro && safeWindowsPath(value.location) && safeWindowsPath(value.file) && (value.version === 1 || value.version === 2)
-        ? { action: 'import', distro, location: value.location, file: value.file, version: value.version } : null;
+        && (value.format === 'tar' || value.format === 'vhd') && (value.format !== 'vhd' || value.version === 2)
+        ? { action: 'import', distro, location: value.location, file: value.file, version: value.version, format: value.format } : null;
     case 'clone': case 'rename': {
       const newDistro = value.newDistro;
       const expected = typeof newDistro === 'string' ? `${value.action.toLocaleUpperCase()} ${distro} AS ${newDistro}` : '';

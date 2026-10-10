@@ -2350,9 +2350,9 @@ var parseWslAction = (value) => {
     case "install":
       return isDistro ? { action: "install", distro } : null;
     case "export":
-      return isDistro && safeWindowsPath(value.file) ? { action: "export", distro, file: value.file } : null;
+      return isDistro && safeWindowsPath(value.file) && (value.format === "tar" || value.format === "vhd") ? { action: "export", distro, file: value.file, format: value.format } : null;
     case "import":
-      return isDistro && safeWindowsPath(value.location) && safeWindowsPath(value.file) && (value.version === 1 || value.version === 2) ? { action: "import", distro, location: value.location, file: value.file, version: value.version } : null;
+      return isDistro && safeWindowsPath(value.location) && safeWindowsPath(value.file) && (value.version === 1 || value.version === 2) && (value.format === "tar" || value.format === "vhd") && (value.format !== "vhd" || value.version === 2) ? { action: "import", distro, location: value.location, file: value.file, version: value.version, format: value.format } : null;
     case "clone":
     case "rename": {
       const newDistro = value.newDistro;
@@ -3110,7 +3110,7 @@ trap - EXIT`;
     case "export": {
       if (await pathExists(action.file))
         return { ok: false, message: "Le fichier cible existe déjà. Choisis un nouveau chemin pour ne pas l’écraser." };
-      const result = await run2(["--export", action.distro, action.file], 900000);
+      const result = await run2(action.format === "vhd" ? ["--export", action.distro, action.file, "--vhd"] : ["--export", action.distro, action.file], 900000);
       return result.ok ? success(`Archive exportée vers ${action.file}.`) : failed(result);
     }
     case "import": {
@@ -3119,7 +3119,10 @@ trap - EXIT`;
       const source = await lstat(action.file).then((stat) => stat.isFile()).catch(() => false);
       if (!source)
         return { ok: false, message: "L’archive d’import est introuvable ou n’est pas un fichier." };
-      const result = await run2(["--import", action.distro, action.location, action.file, "--version", String(action.version)], 900000);
+      const args = ["--import", action.distro, action.location, action.file, "--version", String(action.version)];
+      if (action.format === "vhd")
+        args.push("--vhd");
+      const result = await run2(args, 900000);
       return result.ok ? success(`${action.distro} importée.`) : failed(result);
     }
     case "clone": {

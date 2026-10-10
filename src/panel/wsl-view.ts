@@ -11,6 +11,8 @@ const fieldDrafts = new Map<string, string>();
 const configSettingDrafts = new Map<string, string>();
 let selectedWslDistro: string | null = null;
 let selectedImportVersion: 1 | 2 = 2;
+let selectedImportFormat: 'tar' | 'vhd' = 'tar';
+const exportFormats = new Map<string, 'tar' | 'vhd'>();
 let distroSearch = '';
 let distroStateFilter = 'all';
 let distroVersionFilter = 'all';
@@ -355,10 +357,19 @@ const distroCard = (options: WslPanelOptions, distro: WslDistribution): HTMLElem
   } else {
     fields.append(element('div', 'caption', options.tm.wsl2Required));
   }
-  const archive = textField(fields, `export:${distro.name}`, options.tm.exportTo, options.tm.archivePlaceholder);
+  const archiveFormatSlot = element('div');
+  const archiveFormat = exportFormats.get(distro.name) ?? 'tar';
+  mountSelect(archiveFormatSlot, {
+    label: options.tm.archiveFormat,
+    value: distro.version === 2 ? archiveFormat : 'tar',
+    options: [{ id: 'tar', label: options.tm.tarFormat }, ...(distro.version === 2 ? [{ id: 'vhd', label: options.tm.vhdFormat }] : [])],
+    onChange: (next) => { if (next === 'tar' || next === 'vhd') exportFormats.set(distro.name, next); },
+  });
+  fields.append(archiveFormatSlot);
+  const archive = textField(fields, `export:${distro.name}`, options.tm.exportTo, distro.version === 2 && archiveFormat === 'vhd' ? 'D:\\Backups\\Ubuntu.vhdx' : options.tm.archivePlaceholder);
   actionButton(fields, options.tm.exportDistribution, () => {
     const file = archive();
-    if (file) options.onAction({ action: 'export', distro: distro.name, file });
+    if (file) options.onAction({ action: 'export', distro: distro.name, file, format: exportFormats.get(distro.name) ?? 'tar' });
   }, busy, 'outline');
   const cloneName = textField(fields, `clone:name:${distro.name}`, options.tm.cloneName, `${distro.name}-copy`);
   const cloneLocation = textField(fields, `clone:location:${distro.name}`, options.tm.cloneLocation, options.tm.pathPlaceholder);
@@ -556,12 +567,39 @@ export const renderWslView = (options: WslPanelOptions): HTMLElement => {
   const importName = textField(importFields, 'import:name', options.tm.distroName, 'UbuntuBackup');
   const importLocation = textField(importFields, 'import:location', options.tm.installLocation, options.tm.pathPlaceholder);
   const importFile = textField(importFields, 'import:file', options.tm.importArchive, options.tm.archivePlaceholder);
+  const importFormatSlot = element('div');
   const versionSlot = element('div');
-  mountSelect(versionSlot, { label: options.tm.versionLabel, value: String(selectedImportVersion), options: [{ id: '1', label: 'WSL 1' }, { id: '2', label: 'WSL 2' }], onChange: (id) => { selectedImportVersion = id === '1' ? 1 : 2; } });
+  const versionOptions = [{ id: '1', label: 'WSL 1' }, { id: '2', label: 'WSL 2' }];
+  const versionControl = mountSelect(versionSlot, {
+    label: options.tm.versionLabel,
+    value: String(selectedImportFormat === 'vhd' ? 2 : selectedImportVersion),
+    options: versionOptions,
+    onChange: (id) => { selectedImportVersion = selectedImportFormat === 'vhd' ? 2 : id === '1' ? 1 : 2; },
+  });
+  const vhdNotice = element('div', 'caption', options.tm.vhdRequiresWsl2);
+  vhdNotice.hidden = selectedImportFormat !== 'vhd';
+  mountSelect(importFormatSlot, {
+    label: options.tm.archiveFormat,
+    value: selectedImportFormat,
+    options: [{ id: 'tar', label: options.tm.tarFormat }, { id: 'vhd', label: options.tm.vhdFormat }],
+    onChange: (next) => {
+      if (next === 'tar' || next === 'vhd') selectedImportFormat = next;
+      if (selectedImportFormat === 'vhd') selectedImportVersion = 2;
+      versionControl.update({
+        label: options.tm.versionLabel,
+        value: String(selectedImportVersion),
+        options: versionOptions,
+        onChange: (id) => { selectedImportVersion = selectedImportFormat === 'vhd' ? 2 : id === '1' ? 1 : 2; },
+      });
+      vhdNotice.hidden = selectedImportFormat !== 'vhd';
+    },
+  });
+  importFields.append(importFormatSlot);
   importFields.append(versionSlot);
+  importFields.append(vhdNotice);
   actionButton(importFields, options.tm.importDistribution, () => {
     const distro = importName(); const location = importLocation(); const file = importFile();
-    if (distro && location && file) options.onAction({ action: 'import', distro, location, file, version: selectedImportVersion });
+    if (distro && location && file) options.onAction({ action: 'import', distro, location, file, version: selectedImportFormat === 'vhd' ? 2 : selectedImportVersion, format: selectedImportFormat });
   }, options.busy, 'outline');
   importCard.append(importFields);
   view.append(importCard);

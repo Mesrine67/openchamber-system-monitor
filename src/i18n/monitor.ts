@@ -33,6 +33,7 @@ export type MonitorMessages = {
   cancel: string; compactWarning: string; forceShutdownWarning: string; shutdownWarning: string; compactDisk: string; setVersionWarning: string;
   installDistribution: string; onlineCatalog: string; selectDistribution: string; exportDistribution: string; exportTo: string;
   importDistribution: string; importArchive: string; distroName: string; installLocation: string; versionLabel: string;
+  archiveFormat: string; tarFormat: string; vhdFormat: string; vhdRequiresWsl2: string;
   moveDistro: string; resizeDisk: string; enableSparse: string; disableSparse: string; moveWarning: string; resizeWarning: string;
   operationSection: string; manageSection: string; pathPlaceholder: string; archivePlaceholder: string; usernamePlaceholder: string;
   noCatalogItems: string; loadCatalog: string;
@@ -95,7 +96,8 @@ const en: MonitorMessages = {
   shutdownWarning: 'All running WSL distributions will be stopped.', compactDisk: 'Compact virtual disk',
   setVersionWarning: 'Converting a distribution can take a long time and may fail. Back up important files before changing its WSL version.',
   installDistribution: 'Install distribution', onlineCatalog: 'Online catalog', selectDistribution: 'Select a distribution', exportDistribution: 'Export distribution', exportTo: 'Export archive to',
-  importDistribution: 'Import distribution', importArchive: 'Import TAR archive', distroName: 'New distribution name', installLocation: 'Installation folder', versionLabel: 'WSL version',
+  importDistribution: 'Import distribution', importArchive: 'Import archive', distroName: 'New distribution name', installLocation: 'Installation folder', versionLabel: 'WSL version',
+  archiveFormat: 'Archive format', tarFormat: 'TAR archive', vhdFormat: 'VHDX (WSL 2)', vhdRequiresWsl2: 'VHDX import requires WSL 2.',
   moveDistro: 'Move distribution', resizeDisk: 'Resize virtual disk', enableSparse: 'Enable sparse mode', disableSparse: 'Disable sparse mode',
   moveWarning: 'This moves {distro} to another folder and may take several minutes. Ensure WSL has enough free space at the destination.',
   resizeWarning: 'This stops all WSL distributions before changing the virtual disk size for {distro}.',
@@ -167,7 +169,8 @@ const fr: MonitorMessages = {
   shutdownWarning: 'Toutes les distributions WSL en cours seront arrêtées.', compactDisk: 'Compacter le disque virtuel',
   setVersionWarning: 'La conversion peut prendre du temps ou échouer. Sauvegarde les fichiers importants avant de changer la version WSL.',
   installDistribution: 'Installer une distribution', onlineCatalog: 'Catalogue en ligne', selectDistribution: 'Choisir une distribution', exportDistribution: 'Exporter la distribution', exportTo: 'Exporter l’archive vers',
-  importDistribution: 'Importer une distribution', importArchive: 'Importer une archive TAR', distroName: 'Nom de la nouvelle distribution', installLocation: 'Dossier d’installation', versionLabel: 'Version WSL',
+  importDistribution: 'Importer une distribution', importArchive: 'Archive à importer', distroName: 'Nom de la nouvelle distribution', installLocation: 'Dossier d’installation', versionLabel: 'Version WSL',
+  archiveFormat: 'Format d’archive', tarFormat: 'Archive TAR', vhdFormat: 'VHDX (WSL 2)', vhdRequiresWsl2: 'L’import VHDX nécessite WSL 2.',
   moveDistro: 'Déplacer la distribution', resizeDisk: 'Redimensionner le disque virtuel', enableSparse: 'Activer le mode sparse', disableSparse: 'Désactiver le mode sparse',
   moveWarning: 'Cette opération déplace {distro} vers un autre dossier et peut durer plusieurs minutes. Vérifie l’espace libre à destination.',
   resizeWarning: 'Cette opération arrête toutes les distributions WSL avant de modifier la taille du disque virtuel de {distro}.',

@@ -339,14 +339,18 @@ trap - EXIT`;
     }
     case 'export': {
       if (await pathExists(action.file)) return { ok: false, message: 'Le fichier cible existe déjà. Choisis un nouveau chemin pour ne pas l’écraser.' };
-      const result = await run(['--export', action.distro, action.file], 900_000);
+      const result = await run(action.format === 'vhd'
+        ? ['--export', action.distro, action.file, '--vhd']
+        : ['--export', action.distro, action.file], 900_000);
       return result.ok ? success(`Archive exportée vers ${action.file}.`) : failed(result);
     }
     case 'import': {
       if (await pathExists(action.location)) return { ok: false, message: 'Le dossier d’installation existe déjà. Choisis un nouveau dossier vide.' };
       const source = await lstat(action.file).then((stat) => stat.isFile()).catch(() => false);
       if (!source) return { ok: false, message: 'L’archive d’import est introuvable ou n’est pas un fichier.' };
-      const result = await run(['--import', action.distro, action.location, action.file, '--version', String(action.version)], 900_000);
+      const args = ['--import', action.distro, action.location, action.file, '--version', String(action.version)];
+      if (action.format === 'vhd') args.push('--vhd');
+      const result = await run(args, 900_000);
       return result.ok ? success(`${action.distro} importée.`) : failed(result);
     }
     case 'clone': {
