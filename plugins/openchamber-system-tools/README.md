@@ -9,17 +9,17 @@ The plugin uses the active host's existing tools. It is not an OpenChamber exten
 
 ## Install from this repository in Codex desktop
 
-Add this repository as a Git marketplace using the `codex/openai-plugin` ref and the `.agents/plugins` sparse path, then choose **Mesrine67 System Tools** in the plugin directory and install **OpenChamber System Tools**. The marketplace catalog and plugin package are within `.agents/plugins`, so one sparse path is sufficient.
+Add this repository as a Git marketplace from the `main` branch, then choose **Mesrine67 System Tools** in the plugin directory and install **OpenChamber System Tools**.
 
 In the Add Marketplace dialog:
 
 - Source: `Mesrine67/openchamber-system-monitor`
-- Git ref: `codex/openai-plugin`
+- Git ref: `main`
 - Partial paths (one per line): `.agents/plugins` and `plugins/openchamber-system-tools`
 
 The catalog is under `.agents/plugins`; the package itself is under `plugins/openchamber-system-tools`. Both paths must be included in the sparse checkout so Codex can read the catalog and resolve its package.
 
-For command-line installation, use `codex plugin marketplace add Mesrine67/openchamber-system-monitor --ref codex/openai-plugin --sparse .agents/plugins --sparse plugins/openchamber-system-tools`, then restart the desktop app and select the plugin in the Plugins Directory.
+For command-line installation, use `codex plugin marketplace add Mesrine67/openchamber-system-monitor --ref main --sparse .agents/plugins --sparse plugins/openchamber-system-tools`, then restart the desktop app and select the plugin in the Plugins Directory.
 
 ## OpenAI public directory
 
