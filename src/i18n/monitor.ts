@@ -48,6 +48,7 @@ export type MonitorMessages = {
   configDnsTunneling: string; configFirewall: string; configAutoProxy: string; configGuiApplications: string; configGpuSupport: string;
   configLocalhostForwarding: string; configNestedVirtualization: string; configDebugConsole: string; configVmIdleTimeout: string;
   configSparseVhd: string; configBestEffortDnsParsing: string; configAutoMemoryReclaim: string; configInstanceIdleTimeout: string;
+  configDefaultVhdSize: string; configDnsProxy: string; configHostAddressLoopback: string; configIgnoredPorts: string;
   configGenerateHosts: string; configGenerateResolvConf: string; configProtectBinfmt: string; configInitTimeout: string;
   configGpuEnabled: string; configAppendGpuLibPath: string; configUseWindowsTimezone: string;
   configInterop: string; configWindowsPath: string; configNoChange: string;
@@ -125,6 +126,7 @@ const en: MonitorMessages = {
   configDnsTunneling: 'DNS tunneling', configFirewall: 'Windows Firewall integration', configAutoProxy: 'Use Windows proxy settings', configGuiApplications: 'WSLg Linux GUI applications', configGpuSupport: 'GPU support for Linux applications',
   configLocalhostForwarding: 'Forward localhost ports to Windows', configNestedVirtualization: 'Nested virtualization', configDebugConsole: 'Show WSL kernel debug console', configVmIdleTimeout: 'Shut down idle WSL VM after (ms)',
   configSparseVhd: 'Use sparse VHDs for newly created disks (experimental)', configBestEffortDnsParsing: 'Best-effort DNS parsing (experimental)', configAutoMemoryReclaim: 'Automatic memory reclaim (experimental)', configInstanceIdleTimeout: 'Shut down idle distributions after (ms; -1 disables)',
+  configDefaultVhdSize: 'Maximum size for new distro disks (for example 1TB)', configDnsProxy: 'Use the Windows DNS proxy (NAT mode)', configHostAddressLoopback: 'Allow host IPv4 address loopback (mirrored mode)', configIgnoredPorts: 'Ports Linux may bind despite Windows listeners (mirrored mode; comma-separated)',
   configGenerateHosts: 'Generate /etc/hosts automatically', configGenerateResolvConf: 'Generate /etc/resolv.conf automatically', configProtectBinfmt: 'Protect systemd binfmt registrations', configInitTimeout: 'Wait for systemd initialization (ms)',
   configGpuEnabled: 'Allow GPU access in this distribution', configAppendGpuLibPath: 'Add WSL GPU libraries to linker path', configUseWindowsTimezone: 'Use and sync the Windows time zone',
   configSystemd: 'Enable systemd', configAutoMount: 'Automatically mount Windows drives', configMountFstab: 'Process /etc/fstab at startup',
@@ -206,6 +208,7 @@ const fr: MonitorMessages = {
   configDnsTunneling: 'Tunnel DNS', configFirewall: 'Intégration du pare-feu Windows', configAutoProxy: 'Utiliser le proxy Windows', configGuiApplications: 'Applications Linux graphiques via WSLg', configGpuSupport: 'Prise en charge GPU pour les applications Linux',
   configLocalhostForwarding: 'Transférer les ports localhost vers Windows', configNestedVirtualization: 'Virtualisation imbriquée', configDebugConsole: 'Afficher la console de débogage du noyau WSL', configVmIdleTimeout: 'Arrêter la VM WSL inactive après (ms)',
   configSparseVhd: 'Créer de nouveaux disques VHD sparse (expérimental)', configBestEffortDnsParsing: 'Analyse DNS tolérante (expérimental)', configAutoMemoryReclaim: 'Récupération automatique de mémoire (expérimental)', configInstanceIdleTimeout: 'Arrêter les distributions inactives après (ms ; -1 désactive)',
+  configDefaultVhdSize: 'Taille maximale des nouveaux disques de distribution (exemple : 1TB)', configDnsProxy: 'Utiliser le proxy DNS Windows (mode NAT)', configHostAddressLoopback: 'Autoriser la boucle vers les adresses IPv4 de l’hôte (mode mirrored)', configIgnoredPorts: 'Ports que Linux peut utiliser malgré Windows (mode mirrored ; séparés par des virgules)',
   configGenerateHosts: 'Générer automatiquement /etc/hosts', configGenerateResolvConf: 'Générer automatiquement /etc/resolv.conf', configProtectBinfmt: 'Protéger les enregistrements binfmt de systemd', configInitTimeout: 'Attendre l’initialisation de systemd (ms)',
   configGpuEnabled: 'Autoriser le GPU dans cette distribution', configAppendGpuLibPath: 'Ajouter les bibliothèques GPU WSL au chemin de liaison', configUseWindowsTimezone: 'Utiliser et synchroniser le fuseau horaire Windows',
   configSystemd: 'Activer systemd', configAutoMount: 'Monter automatiquement les lecteurs Windows', configMountFstab: 'Traiter /etc/fstab au démarrage',

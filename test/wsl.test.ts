@@ -44,10 +44,14 @@ describe('WSL parser', () => {
   });
 
   test('recognizes additional guided settings for WSL networking, GPU, boot and time', () => {
-    const result = inspectWslConfig('[wsl2]\nlocalhostForwarding=true\nvmIdleTimeout=60000\n[experimental]\nautoMemoryReclaim=gradual\n[network]\ngenerateHosts=false\ngenerateResolvConf=false\n[gpu]\nenabled=true\nappendLibPath=true\n[time]\nuseWindowsTimezone=false\n[boot]\nprotectBinfmt=true\ninitTimeout=20000');
+    const result = inspectWslConfig('[wsl2]\nlocalhostForwarding=true\nvmIdleTimeout=60000\ndefaultVhdSize=1TB\ndnsProxy=false\nhostAddressLoopback=true\nignoredPorts=53,3000\n[experimental]\nautoMemoryReclaim=gradual\n[network]\ngenerateHosts=false\ngenerateResolvConf=false\n[gpu]\nenabled=true\nappendLibPath=true\n[time]\nuseWindowsTimezone=false\n[boot]\nprotectBinfmt=true\ninitTimeout=20000');
     expect(result.insights).toEqual([
       { section: 'wsl2', key: 'localhostforwarding', value: 'true' },
       { section: 'wsl2', key: 'vmidletimeout', value: '60000' },
+      { section: 'wsl2', key: 'defaultvhdsize', value: '1TB' },
+      { section: 'wsl2', key: 'dnsproxy', value: 'false' },
+      { section: 'wsl2', key: 'hostaddressloopback', value: 'true' },
+      { section: 'wsl2', key: 'ignoredports', value: '53,3000' },
       { section: 'experimental', key: 'automemoryreclaim', value: 'gradual' },
       { section: 'network', key: 'generatehosts', value: 'false' },
       { section: 'network', key: 'generateresolvconf', value: 'false' },
